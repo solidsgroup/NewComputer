@@ -13,6 +13,7 @@ LOGIN_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/solidsgroup.png"
 DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
 LOG_FILE="/var/log/new-computer-configure.log"
 FAILED_LINE="unknown"
+PROGRESS_PERCENT=0
 
 if [[ $EUID -ne 0 ]]; then
     echo "Run this script as root: sudo $0"
@@ -35,6 +36,32 @@ fi
 touch "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
+show_progress() {
+    local percent="$1"
+    local message="$2"
+    local width=40
+    local filled
+    local empty
+    local completed_bar
+    local remaining_bar
+
+    if (( percent < 0 || percent > 100 )); then
+        echo "Invalid progress percentage: $percent" >&2
+        return 1
+    fi
+
+    filled=$((percent * width / 100))
+    empty=$((width - filled))
+    printf -v completed_bar '%*s' "$filled" ''
+    printf -v remaining_bar '%*s' "$empty" ''
+    completed_bar="${completed_bar// /#}"
+    remaining_bar="${remaining_bar// /-}"
+    PROGRESS_PERCENT="$percent"
+
+    printf '\n[%s%s] %3d%% %s\n' \
+        "$completed_bar" "$remaining_bar" "$percent" "$message"
+}
+
 trap 'FAILED_LINE=$LINENO' ERR
 finish() {
     local exit_status=$?
@@ -44,6 +71,7 @@ finish() {
         echo "A reboot is recommended. Log: $LOG_FILE"
     else
         echo "Configuration failed near line $FAILED_LINE with status $exit_status."
+        echo "Installer stopped at approximately $PROGRESS_PERCENT%."
         echo "Review the log at $LOG_FILE"
     fi
 }
@@ -85,13 +113,17 @@ esac
 
 echo "Starting unattended configuration for Ubuntu $VERSION_ID."
 echo "Progress is being logged to $LOG_FILE"
+show_progress 0 "Starting configuration"
 
 # basic upgrade and update
+show_progress 5 "Refreshing Ubuntu package metadata"
 "${APT_GET[@]}" update
+show_progress 12 "Upgrading installed Ubuntu packages"
 "${APT_GET[@]}" upgrade
 
 # kde-full and several supporting packages are in Universe. Enable it when a
 # minimal Ubuntu installation does not already provide it.
+show_progress 18 "Checking required Ubuntu repositories"
 if ! apt-cache show kde-full >/dev/null 2>&1; then
     "${APT_GET[@]}" install software-properties-common
     add-apt-repository -y universe
@@ -100,19 +132,27 @@ fi
 
 # Install the complete KDE desktop and use KDE's SDDM login manager.
 # Preseeding the display-manager choice keeps this install non-interactive.
-echo "sddm shared/default-x-display-manager select sddm" | debconf-set-selections
+# Ubuntu's display-manager package scripts preserve an existing selection, so
+# also update the authoritative file explicitly after installing SDDM. This
+# keeps that file and systemd's display-manager.service link in agreement.
+show_progress 22 "Installing KDE Plasma and SDDM"
+echo "shared shared/default-x-display-manager select sddm" | debconf-set-selections
 "${APT_GET[@]}" install \
     kde-full \
     sddm \
     "${SDDM_QML_PACKAGES[@]}"
+printf '%s\n' /usr/bin/sddm > /etc/X11/default-display-manager
+echo "shared shared/default-x-display-manager select sddm" | debconf-set-selections
 dpkg-reconfigure sddm
 systemctl enable --force sddm.service
 
 # Jetbrains font
+show_progress 42 "Installing fonts"
 "${APT_GET[@]}" install fonts-jetbrains-mono elpa-ligature
 
 
 # Install the login and desktop wallpapers.
+show_progress 47 "Installing desktop and login wallpapers"
 install -Dm644 "$LOGIN_WALLPAPER_SOURCE" /usr/share/backgrounds/solidsgroup.png
 install -Dm644 "$DESKTOP_WALLPAPER_SOURCE" /usr/share/backgrounds/cubes.png
 
@@ -255,6 +295,7 @@ EOF
 
 # Use a custom SDDM theme with its login card on the left, leaving the logo in
 # the center of the wallpaper unobstructed.
+show_progress 55 "Configuring the SDDM login screen"
 SDDM_THEME_DIR="/usr/share/sddm/themes/solids-group"
 install -d -m755 "$SDDM_THEME_DIR" /etc/sddm.conf.d
 
@@ -417,11 +458,15 @@ Rectangle {
 EOF
 
 cat <<'EOF' > /etc/sddm.conf.d/10-solids-group.conf
+[General]
+InputMethod=
+
 [Theme]
 Current=solids-group
 EOF
 
 # Install standard software
+show_progress 62 "Installing standard software and development tools"
 "${APT_GET[@]}" install \
     emacs \
     mpich \
@@ -443,8 +488,10 @@ EOF
     ufw
 
 # add everything needed to run with clang
+show_progress 78 "Installing the Clang toolchain"
 "${APT_GET[@]}" install clang clangd libstdc++-14-dev libgfortran-14-dev
 
+show_progress 84 "Starting Snap support"
 systemctl enable --now snapd.socket
 timeout 300 snap wait system seed.loaded || true
 
@@ -467,12 +514,18 @@ install_snap() {
     return 1
 }
 
+show_progress 88 "Installing Slack"
 install_snap slack
+show_progress 93 "Installing Overleaf"
 install_snap overleaf
 
 # Activate remote SSH login
+show_progress 97 "Configuring remote SSH access"
 ufw allow OpenSSH
 
 # Remove packages that are no longer needed only after the full installation
 # has completed successfully.
+show_progress 99 "Removing unneeded packages"
 "${APT_GET[@]}" autoremove
+
+show_progress 100 "Configuration complete"
