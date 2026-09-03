@@ -1,12 +1,16 @@
 # New Computer Configuration
 
 This repository contains an unattended installer for Ubuntu 24.04 LTS and
-Ubuntu 26.04 LTS. It installs the complete KDE desktop, selects SDDM as the
-login manager, installs the standard software used by the group, and
-configures the supplied wallpapers.
+Ubuntu 26.04 LTS. It installs the complete KDE desktop, selects LightDM with
+its standard GTK greeter as the login manager, installs the standard software
+used by the group, and configures the supplied wallpapers.
 
-- SDDM login background: `wallpaper/solidsgroup.png`
+- LightDM login background: `wallpaper/solidsgroup.png`
 - Desktop background: `wallpaper/cubes.png`
+
+LightDM uses its packaged GTK greeter rather than a custom theme. Its login
+panel is placed toward the left so the wallpaper's centered logo remains
+visible, and the on-screen keyboard is disabled by default.
 
 The desktop wallpaper is applied once per user and desktop environment. A
 user can change it afterward without the installer resetting it at every
@@ -94,25 +98,10 @@ partially configured system. Correct the reported problem and run the same
 command again; package installation and configuration steps are safe to
 repeat.
 
-### Repair an SDDM/LightDM mismatch
-
-An earlier version of this installer could enable SDDM while leaving LightDM
-in `/etc/X11/default-display-manager`. If SDDM consequently fails before the
-login screen appears, open a text console with `Ctrl`+`Alt`+`F3`, sign in, and
-run:
-
-```bash
-printf '/usr/bin/sddm\n' | sudo tee /etc/X11/default-display-manager >/dev/null
-echo 'shared shared/default-x-display-manager select sddm' | sudo debconf-set-selections
-sudo systemctl enable --force sddm.service
-sudo systemctl reset-failed sddm.service
-sudo systemctl restart sddm.service
-```
-
 ## After installation
 
 The installer does not reboot automatically. After it reports successful
-completion, reboot to start SDDM and KDE Plasma:
+completion, reboot to start LightDM and KDE Plasma:
 
 ```bash
 sudo reboot

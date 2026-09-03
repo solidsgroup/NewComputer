@@ -93,17 +93,7 @@ APT_GET=(
 
 . /etc/os-release
 case "${VERSION_ID:-}" in
-    24.04)
-        SDDM_QML_PACKAGES=(
-            qml-module-qtquick-controls2
-            qml-module-qtquick-layouts
-        )
-        ;;
-    26.04)
-        SDDM_QML_PACKAGES=(
-            qml6-module-qtquick-controls
-            qml6-module-qtquick-layouts
-        )
+    24.04|26.04)
         ;;
     *)
         echo "Unsupported Ubuntu release: ${VERSION_ID:-unknown}. Expected 24.04 or 26.04."
@@ -130,21 +120,23 @@ if ! apt-cache show kde-full >/dev/null 2>&1; then
     "${APT_GET[@]}" update
 fi
 
-# Install the complete KDE desktop and use KDE's SDDM login manager.
+# Install the complete KDE desktop and use LightDM's standard GTK greeter.
 # Preseeding the display-manager choice keeps this install non-interactive.
 # Ubuntu's display-manager package scripts preserve an existing selection, so
-# also update the authoritative file explicitly after installing SDDM. This
+# also update the authoritative file explicitly after installing LightDM. This
 # keeps that file and systemd's display-manager.service link in agreement.
-show_progress 22 "Installing KDE Plasma and SDDM"
-echo "shared shared/default-x-display-manager select sddm" | debconf-set-selections
+show_progress 22 "Installing KDE Plasma and LightDM"
+echo "shared shared/default-x-display-manager select lightdm" | debconf-set-selections
 "${APT_GET[@]}" install \
     kde-full \
-    sddm \
-    "${SDDM_QML_PACKAGES[@]}"
-printf '%s\n' /usr/bin/sddm > /etc/X11/default-display-manager
-echo "shared shared/default-x-display-manager select sddm" | debconf-set-selections
-dpkg-reconfigure sddm
-systemctl enable --force sddm.service
+    lightdm \
+    lightdm-gtk-greeter
+printf '%s\n' /usr/sbin/lightdm > /etc/X11/default-display-manager
+echo "shared shared/default-x-display-manager select lightdm" | debconf-set-selections
+dpkg-reconfigure lightdm
+ln -sfn /lib/systemd/system/lightdm.service \
+    /etc/systemd/system/display-manager.service
+systemctl daemon-reload
 
 # Jetbrains font
 show_progress 42 "Installing fonts"
@@ -293,176 +285,34 @@ X-GNOME-Autostart-enabled=true
 NoDisplay=true
 EOF
 
-# Use a custom SDDM theme with its login card on the left, leaving the logo in
-# the center of the wallpaper unobstructed.
-show_progress 55 "Configuring the SDDM login screen"
-SDDM_THEME_DIR="/usr/share/sddm/themes/solids-group"
-install -d -m755 "$SDDM_THEME_DIR" /etc/sddm.conf.d
+# Remove files created by older versions of this installer for its custom
+# SDDM theme. SDDM may remain installed as a KDE recommendation, but LightDM
+# is the selected display manager.
+rm -f /etc/sddm.conf.d/10-solids-group.conf \
+      /usr/share/sddm/themes/solids-group/Main.qml \
+      /usr/share/sddm/themes/solids-group/metadata.desktop
+rmdir /usr/share/sddm/themes/solids-group 2>/dev/null || true
 
-cat <<'EOF' > "$SDDM_THEME_DIR/metadata.desktop"
-[SddmGreeterTheme]
-Name=Solids Group
-Description=Solids Group login theme with a left-aligned login card
-Author=Solids Group
-License=CC-BY-SA
-Type=sddm-theme
-Version=1.0
-MainScript=Main.qml
-Theme-Id=solids-group
-Theme-API=2.0
+# Configure LightDM's packaged GTK greeter. The login panel is kept left of
+# center so that it does not cover the centered logo in the group wallpaper.
+show_progress 55 "Configuring the LightDM login screen"
+install -d -m755 /etc/lightdm/lightdm.conf.d \
+                  /etc/lightdm/lightdm-gtk-greeter.conf.d
+
+cat <<'EOF' > /etc/lightdm/lightdm.conf.d/50-solids-group.conf
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=plasma
+allow-guest=false
 EOF
 
-cat <<'EOF' > "$SDDM_THEME_DIR/Main.qml"
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-
-Rectangle {
-    id: root
-    width: 1920
-    height: 1080
-    color: "#080a0c"
-
-    function logIn() {
-        message.text = "Signing in..."
-        sddm.login(username.text, password.text, session.currentIndex)
-    }
-
-    Image {
-        anchors.fill: parent
-        source: "file:///usr/share/backgrounds/solidsgroup.png"
-        fillMode: Image.PreserveAspectCrop
-        horizontalAlignment: Image.AlignHCenter
-        verticalAlignment: Image.AlignVCenter
-        asynchronous: true
-        cache: true
-    }
-
-    Rectangle {
-        id: loginCard
-        width: Math.min(390, root.width * 0.30)
-        height: loginLayout.implicitHeight + 64
-        anchors.left: parent.left
-        anchors.leftMargin: Math.max(24, root.width * 0.04)
-        anchors.verticalCenter: parent.verticalCenter
-        radius: 12
-        color: "#d9161a1e"
-        border.width: 1
-        border.color: "#553b83b6"
-
-        ColumnLayout {
-            id: loginLayout
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Math.min(32, loginCard.width * 0.08)
-            spacing: 14
-
-            Label {
-                text: "Welcome"
-                color: "white"
-                font.pixelSize: 28
-                font.weight: Font.DemiBold
-                Layout.fillWidth: true
-            }
-
-            Label {
-                text: Qt.formatDateTime(new Date(), "dddd, MMMM d")
-                color: "#b8c1cc"
-                font.pixelSize: 14
-                Layout.fillWidth: true
-            }
-
-            Item { height: 4 }
-
-            TextField {
-                id: username
-                placeholderText: "Username"
-                text: userModel.lastUser
-                selectByMouse: true
-                Layout.fillWidth: true
-                onAccepted: password.forceActiveFocus()
-            }
-
-            TextField {
-                id: password
-                placeholderText: "Password"
-                echoMode: TextInput.Password
-                selectByMouse: true
-                Layout.fillWidth: true
-                onAccepted: root.logIn()
-            }
-
-            ComboBox {
-                id: session
-                model: sessionModel
-                textRole: "name"
-                currentIndex: sessionModel.lastIndex
-                Layout.fillWidth: true
-            }
-
-            Button {
-                text: "Sign In"
-                highlighted: true
-                Layout.fillWidth: true
-                onClicked: root.logIn()
-            }
-
-            Label {
-                id: message
-                text: ""
-                color: "#ff8a80"
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-                Layout.fillWidth: true
-            }
-
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 12
-
-                Button {
-                    text: "Restart"
-                    flat: true
-                    visible: sddm.canReboot
-                    onClicked: sddm.reboot()
-                }
-
-                Button {
-                    text: "Shut Down"
-                    flat: true
-                    visible: sddm.canPowerOff
-                    onClicked: sddm.powerOff()
-                }
-            }
-        }
-    }
-
-    Connections {
-        target: sddm
-
-        function onLoginFailed() {
-            message.text = "Login failed"
-            password.text = ""
-            password.forceActiveFocus()
-        }
-    }
-
-    Component.onCompleted: {
-        if (username.text.length > 0)
-            password.forceActiveFocus()
-        else
-            username.forceActiveFocus()
-    }
-}
-EOF
-
-cat <<'EOF' > /etc/sddm.conf.d/10-solids-group.conf
-[General]
-InputMethod=
-
-[Theme]
-Current=solids-group
+cat <<'EOF' > /etc/lightdm/lightdm-gtk-greeter.conf.d/50-solids-group.conf
+[greeter]
+background=/usr/share/backgrounds/solidsgroup.png
+user-background=false
+position=15% 50%
+keyboard=
+a11y-states=-keyboard
 EOF
 
 # Install standard software
