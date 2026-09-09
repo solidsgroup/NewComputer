@@ -35,7 +35,6 @@ jobs:
         run: |
           sudo apt-get update
           snap info slack >/dev/null
-          snap info overleaf >/dev/null
           curl --fail --location --silent --show-error --head \
             https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
             >/dev/null

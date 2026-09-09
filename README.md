@@ -45,8 +45,13 @@ wallpapers, runs the installer, and removes its temporary files afterward. No
 Git clone or checkout is required.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/solidsgroup/NewComputer/master/install.sh | sudo bash
+curl -fsSL -H 'Accept: application/vnd.github.raw+json' 'https://api.github.com/repos/solidsgroup/NewComputer/contents/install.sh?ref=master' | sudo bash
 ```
+
+This API-backed bootstrap request avoids the short cache delay that GitHub's
+raw branch URLs can have immediately after a push. The bootstrap resolves the
+current commit and downloads all remaining files from that exact revision, so
+one run cannot mix files from different commits.
 
 ## Run from a local checkout
 

@@ -2,7 +2,9 @@
 
 set -Eeuo pipefail
 
-readonly RAW_BASE_URL="https://raw.githubusercontent.com/solidsgroup/NewComputer/master"
+readonly REPOSITORY="solidsgroup/NewComputer"
+readonly BRANCH="master"
+readonly COMMIT_FEED_URL="https://github.com/$REPOSITORY/commits/$BRANCH.atom"
 readonly -a INSTALLER_FILES=(
     "new-computer-configure.sh"
     "wallpaper/solidsgroup.png"
@@ -18,6 +20,30 @@ if ! command -v curl >/dev/null 2>&1; then
     echo "curl is required to download the installer." >&2
     exit 1
 fi
+
+# Mutable raw.githubusercontent.com branch URLs can remain cached for five
+# minutes after a push. Resolve the branch through GitHub's uncached Atom feed,
+# then download every file from the resulting immutable commit URL.
+COMMIT_SHA="$(
+    curl \
+        --fail \
+        --location \
+        --silent \
+        --show-error \
+        --retry 3 \
+        "$COMMIT_FEED_URL" |
+        sed -n 's|.*Grit::Commit/\([0-9a-f]\{40\}\)</id>.*|\1|p' |
+        sed -n '1p'
+)"
+
+if [[ ${#COMMIT_SHA} -ne 40 || "$COMMIT_SHA" == *[!0-9a-f]* ]]; then
+    echo "Unable to resolve the latest $BRANCH commit from GitHub." >&2
+    exit 1
+fi
+
+readonly COMMIT_SHA
+readonly RAW_BASE_URL="https://raw.githubusercontent.com/$REPOSITORY/$COMMIT_SHA"
+printf 'Downloading installer revision %.12s.\n' "$COMMIT_SHA"
 
 INSTALLER_TEMP_DIR="$(mktemp -d)"
 cleanup() {

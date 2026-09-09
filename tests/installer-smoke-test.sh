@@ -147,7 +147,6 @@ assert_trace_matches '^apt-get .* install .*clang.*clangd'
 assert_trace_matches '^apt-get .* autoremove$'
 assert_file_contains "systemctl enable --now snapd.socket" "$COMMAND_TRACE"
 assert_file_contains "snap install slack" "$COMMAND_TRACE"
-assert_file_contains "snap install overleaf" "$COMMAND_TRACE"
 assert_file_contains "ufw allow OpenSSH" "$COMMAND_TRACE"
 
 # File-producing portions run for real on the disposable hosted runner.

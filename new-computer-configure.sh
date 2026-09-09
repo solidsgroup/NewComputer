@@ -38,7 +38,6 @@ readonly -a UI_STEPS=(
     "Install the Clang toolchain"
     "Start Snap support"
     "Install Slack"
-    "Install Overleaf"
     "Configure remote SSH access"
     "Remove unneeded packages"
 )
@@ -702,8 +701,6 @@ install_snap() {
 
 show_progress 88 "Install Slack"
 install_snap slack
-show_progress 93 "Install Overleaf"
-install_snap overleaf
 
 # Activate remote SSH login
 show_progress 97 "Configure remote SSH access"
