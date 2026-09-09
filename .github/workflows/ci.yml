@@ -1,0 +1,44 @@
+name: Installer CI
+
+on:
+  push:
+  schedule:
+    # Monthly at 09:23 UTC on the first day of the month.
+    - cron: "23 9 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer-smoke-test:
+    name: Ubuntu ${{ matrix.ubuntu-version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            ubuntu-version: "24.04"
+          - runner: ubuntu-26.04
+            ubuntu-version: "26.04"
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+
+      - name: Check shell syntax
+        run: bash -n install.sh new-computer-configure.sh tests/installer-smoke-test.sh
+
+      - name: Refresh package indexes and check Snap listings
+        run: |
+          sudo apt-get update
+          snap info slack >/dev/null
+          snap info overleaf >/dev/null
+
+      - name: Exercise the installer
+        env:
+          EXPECTED_UBUNTU_VERSION: ${{ matrix.ubuntu-version }}
+          CI_VALIDATE_APT: "1"
+        run: tests/installer-smoke-test.sh

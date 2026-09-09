@@ -1,0 +1,43 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+command_name="${0##*/}"
+printf '%s' "$command_name" >>"$CI_COMMAND_TRACE"
+printf ' %q' "$@" >>"$CI_COMMAND_TRACE"
+printf '\n' >>"$CI_COMMAND_TRACE"
+
+case "$command_name" in
+    apt-get)
+        if [[ "${CI_VALIDATE_APT:-0}" == "1" ]]; then
+            for argument in "$@"; do
+                # The workflow already refreshed the real indexes. All other
+                # operations go through APT's dependency-resolving simulation.
+                if [[ "$argument" == "update" ]]; then
+                    exit 0
+                fi
+            done
+            /usr/bin/apt-get --simulate "$@"
+        fi
+        ;;
+    apt-cache)
+        if [[ "${CI_VALIDATE_APT:-0}" == "1" ]]; then
+            /usr/bin/apt-cache "$@"
+        else
+            # Unit tests may skip real package-index validation.
+            exit 0
+        fi
+        ;;
+    debconf-set-selections)
+        # Consume the preseed data supplied on stdin.
+        cat >/dev/null
+        ;;
+    snap)
+        # Make the installer exercise both Snap installation paths.
+        if [[ "${1:-}" == "list" ]]; then
+            exit 1
+        fi
+        ;;
+esac
+
+exit 0

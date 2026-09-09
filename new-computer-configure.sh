@@ -14,6 +14,31 @@ DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
 LOG_FILE="/var/log/new-computer-configure.log"
 FAILED_LINE="unknown"
 PROGRESS_PERCENT=0
+UI_CURRENT_STEP=-1
+UI_STATE="running"
+
+readonly C0=$'\033[38;2;31;119;180m'
+readonly C1=$'\033[38;2;255;127;14m'
+readonly UI_BOLD=$'\033[1m'
+readonly UI_DIM=$'\033[2m'
+readonly UI_RESET=$'\033[0m'
+
+readonly -a UI_STEPS=(
+    "Refresh Ubuntu package metadata"
+    "Upgrade installed Ubuntu packages"
+    "Check required Ubuntu repositories"
+    "Install KDE Plasma and LightDM"
+    "Install fonts"
+    "Install desktop and login wallpapers"
+    "Configure the LightDM login screen"
+    "Install standard software and development tools"
+    "Install the Clang toolchain"
+    "Start Snap support"
+    "Install Slack"
+    "Install Overleaf"
+    "Configure remote SSH access"
+    "Remove unneeded packages"
+)
 
 if [[ $EUID -ne 0 ]]; then
     echo "Run this script as root: sudo $0"
@@ -27,6 +52,16 @@ for required_file in "$LOGIN_WALLPAPER_SOURCE" "$DESKTOP_WALLPAPER_SOURCE"; do
     fi
 done
 
+. /etc/os-release
+case "${VERSION_ID:-}" in
+    24.04|26.04)
+        ;;
+    *)
+        echo "Unsupported Ubuntu release: ${VERSION_ID:-unknown}. Expected 24.04 or 26.04."
+        exit 1
+        ;;
+esac
+
 exec 9>/run/lock/new-computer-configure.lock
 if ! flock -n 9; then
     echo "Another copy of this installer is already running."
@@ -34,46 +69,182 @@ if ! flock -n 9; then
 fi
 
 touch "$LOG_FILE"
-exec > >(tee -a "$LOG_FILE") 2>&1
 
-show_progress() {
-    local percent="$1"
-    local message="$2"
-    local width=40
+# Keep the interface on the original stdout while sending verbose command
+# output only to the persistent log. Under systemd, fd 3 is captured by the
+# journal and receives a compact, non-interactive version of the checklist.
+exec 3>&1
+exec >>"$LOG_FILE" 2>&1
+printf '\n===== Solids Group setup started %s =====\n' "$(date --iso-8601=seconds)"
+
+UI_IS_TTY=false
+if [[ -t 3 && "${TERM:-dumb}" != "dumb" ]]; then
+    UI_IS_TTY=true
+fi
+
+UI_USE_COLOR=false
+if [[ "$UI_IS_TTY" == true && -z "${NO_COLOR:-}" ]]; then
+    UI_USE_COLOR=true
+fi
+
+ui_color() {
+    if [[ "$UI_USE_COLOR" == true ]]; then
+        printf '%s' "$1"
+    fi
+    return 0
+}
+
+render_ui() {
+    local blue
+    local orange
+    local bold
+    local dim
+    local reset
+    local completed=0
     local filled
     local empty
     local completed_bar
     local remaining_bar
+    local index
+    local label
+
+    [[ "$UI_IS_TTY" == true ]] || return 0
+
+    blue="$(ui_color "$C0")"
+    orange="$(ui_color "$C1")"
+    bold="$(ui_color "$UI_BOLD")"
+    dim="$(ui_color "$UI_DIM")"
+    reset="$(ui_color "$UI_RESET")"
+
+    if [[ "$UI_STATE" == "succeeded" ]]; then
+        completed=${#UI_STEPS[@]}
+    elif (( UI_CURRENT_STEP >= 0 )); then
+        completed=$UI_CURRENT_STEP
+    fi
+
+    filled=$((PROGRESS_PERCENT * 30 / 100))
+    empty=$((30 - filled))
+    printf -v completed_bar '%*s' "$filled" ''
+    printf -v remaining_bar '%*s' "$empty" ''
+    completed_bar="${completed_bar// /━}"
+    remaining_bar="${remaining_bar// /─}"
+
+    # Redraw in place so package installation never scrolls the checklist away.
+    printf '\033[2J\033[H' >&3
+    printf '  %s◆%s  %sSOLID MECHANICS%s\n' "$blue" "$reset" "$bold" "$reset" >&3
+    printf '     %sRESEARCH GROUP%s  %s·  UBUNTU %s SETUP%s\n' \
+        "$orange" "$reset" "$dim" "$VERSION_ID" "$reset" >&3
+    printf '  %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' \
+        "$blue" "$reset" >&3
+    printf '  %s%s%s%s%s  %3d%%  %d/%d complete\n\n' \
+        "$blue" "$completed_bar" "$reset" "$dim" "$remaining_bar" \
+        "$PROGRESS_PERCENT" "$completed" "${#UI_STEPS[@]}" >&3
+
+    for index in "${!UI_STEPS[@]}"; do
+        label="${UI_STEPS[$index]}"
+        if [[ "$UI_STATE" == "succeeded" || $index -lt $UI_CURRENT_STEP ]]; then
+            printf '  %s✓%s  %s\n' "$blue" "$reset" "$label" >&3
+        elif [[ "$UI_STATE" == "failed" && $index -eq $UI_CURRENT_STEP ]]; then
+            printf '  %s×%s  %s%s%s\n' "$orange" "$reset" "$bold" "$label" "$reset" >&3
+        elif [[ "$UI_STATE" == "running" && $index -eq $UI_CURRENT_STEP ]]; then
+            printf '  %s●%s  %s%s%s\n' "$orange" "$reset" "$bold" "$label" "$reset" >&3
+        else
+            printf '  %s○  %s%s\n' "$dim" "$label" "$reset" >&3
+        fi
+    done
+
+    printf '\n' >&3
+    case "$UI_STATE" in
+        succeeded)
+            printf '  %s✓ Setup complete%s  ·  Reboot recommended\n' \
+                "$blue" "$reset" >&3
+            ;;
+        failed)
+            printf '  %s× Setup stopped near line %s%s  ·  See the log below\n' \
+                "$orange" "$FAILED_LINE" "$reset" >&3
+            ;;
+        *)
+            printf '  %s● Working%s  ·  Detailed activity is hidden\n' \
+                "$orange" "$reset" >&3
+            ;;
+    esac
+    printf '  %sLog: %s%s\n' "$dim" "$LOG_FILE" "$reset" >&3
+}
+
+show_progress() {
+    local percent="$1"
+    local message="$2"
 
     if (( percent < 0 || percent > 100 )); then
         echo "Invalid progress percentage: $percent" >&2
         return 1
     fi
 
-    filled=$((percent * width / 100))
-    empty=$((width - filled))
-    printf -v completed_bar '%*s' "$filled" ''
-    printf -v remaining_bar '%*s' "$empty" ''
-    completed_bar="${completed_bar// /#}"
-    remaining_bar="${remaining_bar// /-}"
     PROGRESS_PERCENT="$percent"
+    printf '\n[%3d%%] %s\n' "$percent" "$message"
 
-    printf '\n[%s%s] %3d%% %s\n' \
-        "$completed_bar" "$remaining_bar" "$percent" "$message"
+    if (( percent == 0 )); then
+        UI_CURRENT_STEP=-1
+    elif (( percent == 100 )); then
+        UI_CURRENT_STEP=-1
+        UI_STATE="succeeded"
+    else
+        UI_CURRENT_STEP=$((UI_CURRENT_STEP + 1))
+        if (( UI_CURRENT_STEP >= ${#UI_STEPS[@]} )); then
+            echo "Checklist has fewer entries than installer steps." >&2
+            return 1
+        fi
+        # Keep the declared checklist honest if a phase label changes later.
+        if [[ "${UI_STEPS[$UI_CURRENT_STEP]}" != "$message" ]]; then
+            echo "Checklist mismatch: expected '${UI_STEPS[$UI_CURRENT_STEP]}', got '$message'." >&2
+            return 1
+        fi
+    fi
+
+    if [[ "$UI_IS_TTY" == true ]]; then
+        render_ui
+    elif (( percent == 0 )); then
+        printf 'SOLID MECHANICS RESEARCH GROUP · UBUNTU %s SETUP\n' \
+            "$VERSION_ID" >&3
+        printf 'Detailed activity: %s\n' "$LOG_FILE" >&3
+    elif (( percent == 100 )); then
+        printf '[%3d%%] ✓ %s\n' "$percent" "$message" >&3
+    else
+        printf '[%3d%%] ● %s\n' "$percent" "$message" >&3
+    fi
 }
 
 trap 'FAILED_LINE=$LINENO' ERR
 finish() {
     local exit_status=$?
 
+    trap - EXIT
+
     if [[ $exit_status -eq 0 ]]; then
         echo "Configuration completed successfully at $(date --iso-8601=seconds)."
         echo "A reboot is recommended. Log: $LOG_FILE"
+        if [[ "$UI_STATE" != "succeeded" ]]; then
+            PROGRESS_PERCENT=100
+            UI_CURRENT_STEP=-1
+            UI_STATE="succeeded"
+            render_ui
+        fi
+        if [[ "$UI_IS_TTY" != true ]]; then
+            printf 'Configuration completed successfully. Reboot recommended.\n' >&3
+        fi
     else
         echo "Configuration failed near line $FAILED_LINE with status $exit_status."
         echo "Installer stopped at approximately $PROGRESS_PERCENT%."
         echo "Review the log at $LOG_FILE"
+        UI_STATE="failed"
+        render_ui
+        if [[ "$UI_IS_TTY" != true ]]; then
+            printf 'Configuration failed near line %s (status %s). Log: %s\n' \
+                "$FAILED_LINE" "$exit_status" "$LOG_FILE" >&3
+        fi
     fi
+
+    exit "$exit_status"
 }
 trap finish EXIT
 
@@ -91,29 +262,19 @@ APT_GET=(
     -o Dpkg::Options::=--force-confold
 )
 
-. /etc/os-release
-case "${VERSION_ID:-}" in
-    24.04|26.04)
-        ;;
-    *)
-        echo "Unsupported Ubuntu release: ${VERSION_ID:-unknown}. Expected 24.04 or 26.04."
-        exit 1
-        ;;
-esac
-
 echo "Starting unattended configuration for Ubuntu $VERSION_ID."
 echo "Progress is being logged to $LOG_FILE"
 show_progress 0 "Starting configuration"
 
 # basic upgrade and update
-show_progress 5 "Refreshing Ubuntu package metadata"
+show_progress 5 "Refresh Ubuntu package metadata"
 "${APT_GET[@]}" update
-show_progress 12 "Upgrading installed Ubuntu packages"
+show_progress 12 "Upgrade installed Ubuntu packages"
 "${APT_GET[@]}" upgrade
 
 # kde-full and several supporting packages are in Universe. Enable it when a
 # minimal Ubuntu installation does not already provide it.
-show_progress 18 "Checking required Ubuntu repositories"
+show_progress 18 "Check required Ubuntu repositories"
 if ! apt-cache show kde-full >/dev/null 2>&1; then
     "${APT_GET[@]}" install software-properties-common
     add-apt-repository -y universe
@@ -125,7 +286,7 @@ fi
 # Ubuntu's display-manager package scripts preserve an existing selection, so
 # also update the authoritative file explicitly after installing LightDM. This
 # keeps that file and systemd's display-manager.service link in agreement.
-show_progress 22 "Installing KDE Plasma and LightDM"
+show_progress 22 "Install KDE Plasma and LightDM"
 echo "shared shared/default-x-display-manager select lightdm" | debconf-set-selections
 "${APT_GET[@]}" install \
     kde-full \
@@ -139,12 +300,12 @@ ln -sfn /lib/systemd/system/lightdm.service \
 systemctl daemon-reload
 
 # Jetbrains font
-show_progress 42 "Installing fonts"
+show_progress 42 "Install fonts"
 "${APT_GET[@]}" install fonts-jetbrains-mono elpa-ligature
 
 
 # Install the login and desktop wallpapers.
-show_progress 47 "Installing desktop and login wallpapers"
+show_progress 47 "Install desktop and login wallpapers"
 install -Dm644 "$LOGIN_WALLPAPER_SOURCE" /usr/share/backgrounds/solidsgroup.png
 install -Dm644 "$DESKTOP_WALLPAPER_SOURCE" /usr/share/backgrounds/cubes.png
 
@@ -295,7 +456,7 @@ rmdir /usr/share/sddm/themes/solids-group 2>/dev/null || true
 
 # Configure LightDM's packaged GTK greeter. The login panel is kept left of
 # center so that it does not cover the centered logo in the group wallpaper.
-show_progress 55 "Configuring the LightDM login screen"
+show_progress 55 "Configure the LightDM login screen"
 install -d -m755 /etc/lightdm/lightdm.conf.d \
                   /etc/lightdm/lightdm-gtk-greeter.conf.d
 
@@ -316,7 +477,7 @@ a11y-states=-keyboard
 EOF
 
 # Install standard software
-show_progress 62 "Installing standard software and development tools"
+show_progress 62 "Install standard software and development tools"
 "${APT_GET[@]}" install \
     emacs \
     mpich \
@@ -338,10 +499,10 @@ show_progress 62 "Installing standard software and development tools"
     ufw
 
 # add everything needed to run with clang
-show_progress 78 "Installing the Clang toolchain"
+show_progress 78 "Install the Clang toolchain"
 "${APT_GET[@]}" install clang clangd libstdc++-14-dev libgfortran-14-dev
 
-show_progress 84 "Starting Snap support"
+show_progress 84 "Start Snap support"
 systemctl enable --now snapd.socket
 timeout 300 snap wait system seed.loaded || true
 
@@ -364,18 +525,18 @@ install_snap() {
     return 1
 }
 
-show_progress 88 "Installing Slack"
+show_progress 88 "Install Slack"
 install_snap slack
-show_progress 93 "Installing Overleaf"
+show_progress 93 "Install Overleaf"
 install_snap overleaf
 
 # Activate remote SSH login
-show_progress 97 "Configuring remote SSH access"
+show_progress 97 "Configure remote SSH access"
 ufw allow OpenSSH
 
 # Remove packages that are no longer needed only after the full installation
 # has completed successfully.
-show_progress 99 "Removing unneeded packages"
+show_progress 99 "Remove unneeded packages"
 "${APT_GET[@]}" autoremove
 
 show_progress 100 "Configuration complete"

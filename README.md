@@ -1,5 +1,7 @@
 # New Computer Configuration
 
+[![Installer CI](https://github.com/solidsgroup/NewComputer/actions/workflows/ci.yml/badge.svg)](https://github.com/solidsgroup/NewComputer/actions/workflows/ci.yml)
+
 This repository contains an unattended installer for Ubuntu 24.04 LTS and
 Ubuntu 26.04 LTS. It installs the complete KDE desktop, selects LightDM with
 its standard GTK greeter as the login manager, installs the standard software
@@ -21,12 +23,23 @@ login.
 - Ubuntu 24.04 LTS or Ubuntu 26.04 LTS
 - Internet access
 - An account with `sudo` access
-- The complete repository, including the `wallpaper` directory
+- `curl` for the no-clone command below
+- The complete repository, including the `wallpaper` directory, for a local run
 
 The script can be started from any directory because it locates its assets
 relative to its own path.
 
-## Run in the terminal
+## Run directly from GitHub
+
+Copy and paste this one-liner. The bootstrap downloads the installer and both
+wallpapers, runs the installer, and removes its temporary files afterward. No
+Git clone or checkout is required.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/solidsgroup/NewComputer/master/install.sh | sudo bash
+```
+
+## Run from a local checkout
 
 From this repository, run:
 
@@ -38,9 +51,20 @@ Enter the `sudo` password when requested. After authentication, the installer
 does not require further input. The terminal remains attached so its progress
 is visible.
 
-The script prints a 40-character overall progress bar at each major phase.
-The percentage tracks completed phases rather than package download bytes;
-detailed APT and Snap output remains visible and is written to the log.
+The script opens a Solids Group-branded terminal checklist using the group's
+blue and orange colors. Completed, active, pending, and failed phases remain
+visible while the installer runs. The percentage marks the overall phase
+position rather than package download bytes.
+
+Verbose APT, Snap, and configuration output is hidden from the interface and
+written to `/var/log/new-computer-configure.log`. If the installer stops, the
+failed checklist item and the relevant script line are shown alongside the log
+location. Set the standard `NO_COLOR` environment variable if you want the
+same interface without color:
+
+```bash
+sudo NO_COLOR=1 ./new-computer-configure.sh
+```
 
 ## Run detached
 
@@ -57,14 +81,16 @@ sudo systemd-run \
 The installation continues as a system service and survives closing the
 terminal or logging out.
 
-Follow its progress with either command:
-
-```bash
-sudo tail -f /var/log/new-computer-configure.log
-```
+Follow its compact progress checklist with:
 
 ```bash
 sudo journalctl -fu new-computer-configure.service
+```
+
+Follow the detailed command output with:
+
+```bash
+sudo tail -f /var/log/new-computer-configure.log
 ```
 
 While the detached installer is running, its service status is available with:
@@ -80,6 +106,16 @@ available at:
 ```text
 /var/log/new-computer-configure.log
 ```
+
+## Continuous integration
+
+GitHub Actions smoke-tests the complete installer flow on native Ubuntu 24.04
+and Ubuntu 26.04 runners after every push and at 09:23 UTC on the first day of
+each month. APT resolves every requested operation in simulation mode against
+fresh package indexes, and the Snap Store listings are checked without
+installing the applications. Service and firewall operations are recorded and
+verified rather than applied; generated configuration files and installed
+wallpaper assets are created and checked on the disposable runner.
 
 ## Completion and errors
 
