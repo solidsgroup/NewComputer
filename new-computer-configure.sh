@@ -11,11 +11,13 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOGIN_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/solidsgroup.png"
 DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
+GOOGLE_CHROME_DEB_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
 LOG_FILE="/var/log/new-computer-configure.log"
 FAILED_LINE="unknown"
 PROGRESS_PERCENT=0
 UI_CURRENT_STEP=-1
 UI_STATE="running"
+CANCELLED_SIGNAL=""
 
 readonly C0=$'\033[38;2;31;119;180m'
 readonly C1=$'\033[38;2;255;127;14m'
@@ -30,8 +32,9 @@ readonly -a UI_STEPS=(
     "Install KDE Plasma and LightDM"
     "Install fonts"
     "Install desktop and login wallpapers"
-    "Configure the LightDM login screen"
+    "Configure the Slick Greeter login screen"
     "Install standard software and development tools"
+    "Install Google Chrome"
     "Install the Clang toolchain"
     "Start Snap support"
     "Install Slack"
@@ -61,6 +64,11 @@ case "${VERSION_ID:-}" in
         exit 1
         ;;
 esac
+
+if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+    echo "Unsupported architecture: Google Chrome for Linux requires amd64/x86-64."
+    exit 1
+fi
 
 exec 9>/run/lock/new-computer-configure.lock
 if ! flock -n 9; then
@@ -146,6 +154,9 @@ render_ui() {
             printf '  %s✓%s  %s\n' "$blue" "$reset" "$label" >&3
         elif [[ "$UI_STATE" == "failed" && $index -eq $UI_CURRENT_STEP ]]; then
             printf '  %s×%s  %s%s%s\n' "$orange" "$reset" "$bold" "$label" "$reset" >&3
+        elif [[ "$UI_STATE" == "cancelled" && $index -eq $UI_CURRENT_STEP ]]; then
+            printf '  %s■%s  %s%s%s %s(cancelled)%s\n' \
+                "$orange" "$reset" "$bold" "$label" "$reset" "$dim" "$reset" >&3
         elif [[ "$UI_STATE" == "running" && $index -eq $UI_CURRENT_STEP ]]; then
             printf '  %s●%s  %s%s%s\n' "$orange" "$reset" "$bold" "$label" "$reset" >&3
         else
@@ -162,6 +173,10 @@ render_ui() {
         failed)
             printf '  %s× Setup stopped near line %s%s  ·  See the log below\n' \
                 "$orange" "$FAILED_LINE" "$reset" >&3
+            ;;
+        cancelled)
+            printf '  %s■ Setup cancelled%s  ·  Completed work was not undone\n' \
+                "$orange" "$reset" >&3
             ;;
         *)
             printf '  %s● Working%s  ·  Detailed activity is hidden\n' \
@@ -214,13 +229,49 @@ show_progress() {
     fi
 }
 
+cancel_installation() {
+    local signal="$1"
+    local exit_status
+
+    CANCELLED_SIGNAL="$signal"
+    UI_STATE="cancelled"
+
+    case "$signal" in
+        INT)
+            exit_status=130
+            ;;
+        TERM)
+            exit_status=143
+            ;;
+        *)
+            exit_status=1
+            ;;
+    esac
+
+    exit "$exit_status"
+}
+
 trap 'FAILED_LINE=$LINENO' ERR
 finish() {
     local exit_status=$?
 
-    trap - EXIT
+    trap - ERR INT TERM EXIT
 
-    if [[ $exit_status -eq 0 ]]; then
+    if [[ -n "$CANCELLED_SIGNAL" ]]; then
+        echo "Configuration cancelled by SIG$CANCELLED_SIGNAL."
+        echo "Installer stopped at approximately $PROGRESS_PERCENT%."
+        echo "Completed changes were not rolled back. Log: $LOG_FILE"
+        UI_STATE="cancelled"
+        render_ui
+        if [[ "$UI_IS_TTY" != true ]]; then
+            if (( UI_CURRENT_STEP >= 0 && UI_CURRENT_STEP < ${#UI_STEPS[@]} )); then
+                printf '[%3d%%] ■ Cancelled: %s\n' \
+                    "$PROGRESS_PERCENT" "${UI_STEPS[$UI_CURRENT_STEP]}" >&3
+            fi
+            printf 'Configuration cancelled by SIG%s at approximately %s%%. Log: %s\n' \
+                "$CANCELLED_SIGNAL" "$PROGRESS_PERCENT" "$LOG_FILE" >&3
+        fi
+    elif [[ $exit_status -eq 0 ]]; then
         echo "Configuration completed successfully at $(date --iso-8601=seconds)."
         echo "A reboot is recommended. Log: $LOG_FILE"
         if [[ "$UI_STATE" != "succeeded" ]]; then
@@ -247,6 +298,8 @@ finish() {
     exit "$exit_status"
 }
 trap finish EXIT
+trap 'cancel_installation INT' INT
+trap 'cancel_installation TERM' TERM
 
 export DEBIAN_FRONTEND=noninteractive
 export APT_LISTCHANGES_FRONTEND=none
@@ -281,7 +334,7 @@ if ! apt-cache show kde-full >/dev/null 2>&1; then
     "${APT_GET[@]}" update
 fi
 
-# Install the complete KDE desktop and use LightDM's standard GTK greeter.
+# Install the complete KDE desktop and use LightDM's standard Slick Greeter.
 # Preseeding the display-manager choice keeps this install non-interactive.
 # Ubuntu's display-manager package scripts preserve an existing selection, so
 # also update the authoritative file explicitly after installing LightDM. This
@@ -291,7 +344,9 @@ echo "shared shared/default-x-display-manager select lightdm" | debconf-set-sele
 "${APT_GET[@]}" install \
     kde-full \
     lightdm \
-    lightdm-gtk-greeter
+    slick-greeter \
+    breeze-gtk-theme \
+    breeze-icon-theme
 printf '%s\n' /usr/sbin/lightdm > /etc/X11/default-display-manager
 echo "shared shared/default-x-display-manager select lightdm" | debconf-set-selections
 dpkg-reconfigure lightdm
@@ -309,6 +364,18 @@ show_progress 47 "Install desktop and login wallpapers"
 install -Dm644 "$LOGIN_WALLPAPER_SOURCE" /usr/share/backgrounds/solidsgroup.png
 install -Dm644 "$DESKTOP_WALLPAPER_SOURCE" /usr/share/backgrounds/cubes.png
 
+# Supply a system-wide Plasma lock-screen default. The per-user initializer
+# below also applies it once so existing accounts with an older value receive
+# the group default without preventing later user customization.
+cat <<'EOF' > /etc/xdg/kscreenlockerrc
+[Greeter]
+WallpaperPlugin=org.kde.image
+
+[Greeter][Wallpaper][org.kde.image][General]
+Image=/usr/share/backgrounds/cubes.png
+PreviewImage=/usr/share/backgrounds/cubes.png
+EOF
+
 # Apply cubes.png once per user for each desktop environment they use. Keeping
 # a marker per environment makes this a default without overriding later user
 # changes. The Plasma branch applies the image to every desktop and display.
@@ -322,12 +389,16 @@ WALLPAPER="/usr/share/backgrounds/cubes.png"
 DESKTOP_NAME="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-unknown}}"
 SESSION_KEY="$(printf '%s' "$DESKTOP_NAME" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '-')"
 MARKER="$HOME/.config/.cubes-wallpaper-set-${SESSION_KEY:-unknown}"
-
-[[ -e "$MARKER" ]] && exit 0
+LOCK_MARKER="$HOME/.config/.cubes-plasma-lock-screen-set"
 
 mark_complete() {
     mkdir -p "$(dirname -- "$MARKER")"
     touch "$MARKER"
+}
+
+mark_lock_complete() {
+    mkdir -p "$(dirname -- "$LOCK_MARKER")"
+    touch "$LOCK_MARKER"
 }
 
 set_plasma_wallpaper() {
@@ -351,6 +422,26 @@ set_plasma_wallpaper() {
         done
 
         sleep 2
+    done
+
+    return 1
+}
+
+set_plasma_lock_screen() {
+    local kwriteconfig_command
+
+    for kwriteconfig_command in kwriteconfig6 kwriteconfig5; do
+        if command -v "$kwriteconfig_command" >/dev/null 2>&1 && \
+           "$kwriteconfig_command" --file kscreenlockerrc \
+               --group Greeter --key WallpaperPlugin org.kde.image && \
+           "$kwriteconfig_command" --file kscreenlockerrc \
+               --group Greeter --group Wallpaper --group org.kde.image \
+               --group General --key Image "$WALLPAPER" && \
+           "$kwriteconfig_command" --file kscreenlockerrc \
+               --group Greeter --group Wallpaper --group org.kde.image \
+               --group General --key PreviewImage "$WALLPAPER"; then
+            return 0
+        fi
     done
 
     return 1
@@ -404,6 +495,18 @@ set_xfce_wallpaper() {
     [[ "$changed" == true ]]
 }
 
+# The lock screen has a separate setting from the Plasma desktop wallpaper.
+# Apply it once even when an earlier installer run already set the desktop.
+case "$DESKTOP_NAME" in
+    *KDE*|*Plasma*)
+        if [[ ! -e "$LOCK_MARKER" ]] && set_plasma_lock_screen; then
+            mark_lock_complete
+        fi
+        ;;
+esac
+
+[[ -e "$MARKER" ]] && exit 0
+
 case "$DESKTOP_NAME" in
     *KDE*|*Plasma*)
         set_plasma_wallpaper && mark_complete
@@ -454,26 +557,41 @@ rm -f /etc/sddm.conf.d/10-solids-group.conf \
       /usr/share/sddm/themes/solids-group/metadata.desktop
 rmdir /usr/share/sddm/themes/solids-group 2>/dev/null || true
 
-# Configure LightDM's packaged GTK greeter. The login panel is kept left of
-# center so that it does not cover the centered logo in the group wallpaper.
-show_progress 55 "Configure the LightDM login screen"
-install -d -m755 /etc/lightdm/lightdm.conf.d \
-                  /etc/lightdm/lightdm-gtk-greeter.conf.d
+# Configure LightDM's packaged Slick Greeter. Use a late-loading filename so
+# settings left by another desktop environment cannot override this choice.
+show_progress 55 "Configure the Slick Greeter login screen"
+install -d -m755 /etc/lightdm/lightdm.conf.d
+rm -f /etc/lightdm/lightdm.conf.d/50-solids-group.conf \
+      /etc/lightdm/lightdm-gtk-greeter.conf.d/50-solids-group.conf
 
-cat <<'EOF' > /etc/lightdm/lightdm.conf.d/50-solids-group.conf
+cat <<'EOF' > /etc/lightdm/lightdm.conf.d/99-solids-group.conf
 [Seat:*]
-greeter-session=lightdm-gtk-greeter
+greeter-session=slick-greeter
 user-session=plasma
 allow-guest=false
+greeter-allow-guest=false
+greeter-show-manual-login=true
+greeter-show-remote-login=false
 EOF
 
-cat <<'EOF' > /etc/lightdm/lightdm-gtk-greeter.conf.d/50-solids-group.conf
-[greeter]
+cat <<'EOF' > /etc/lightdm/slick-greeter.conf
+[Greeter]
 background=/usr/share/backgrounds/solidsgroup.png
-user-background=false
-position=15% 50%
-keyboard=
-a11y-states=-keyboard
+background-color=#10151c
+draw-user-backgrounds=false
+draw-grid=false
+theme-name=Breeze-Dark
+icon-theme-name=breeze
+font-name=Ubuntu 11
+show-hostname=true
+show-keyboard=true
+show-a11y=true
+show-power=true
+show-clock=true
+show-quit=true
+onscreen-keyboard=false
+enable-hidpi=auto
+only_on_monitor=-1
 EOF
 
 # Install standard software
@@ -483,6 +601,8 @@ show_progress 62 "Install standard software and development tools"
     mpich \
     python-is-python3 \
     git \
+    ca-certificates \
+    curl \
     libeigen3-dev \
     libpng-dev \
     libtclap-dev \
@@ -497,6 +617,55 @@ show_progress 62 "Install standard software and development tools"
     texlive-science \
     snapd \
     ufw
+
+install_google_chrome() {
+    local chrome_deb
+    local package_architecture=""
+    local package_name=""
+    local package_version=""
+    local status=0
+
+    if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+        echo "Google Chrome is only available from Google for amd64 systems." >&2
+        return 1
+    fi
+
+    chrome_deb="$(mktemp --tmpdir=/tmp --suffix=.deb google-chrome-stable.XXXXXX)"
+    curl \
+        --fail \
+        --location \
+        --silent \
+        --show-error \
+        --retry 5 \
+        --retry-delay 2 \
+        "$GOOGLE_CHROME_DEB_URL" \
+        --output "$chrome_deb" || status=$?
+
+    if (( status == 0 )); then
+        package_name="$(dpkg-deb --field "$chrome_deb" Package)" || status=$?
+        package_version="$(dpkg-deb --field "$chrome_deb" Version)" || status=$?
+        package_architecture="$(dpkg-deb --field "$chrome_deb" Architecture)" || status=$?
+    fi
+
+    if (( status == 0 )) && \
+       { [[ "$package_name" != "google-chrome-stable" ]] || \
+         [[ "$package_architecture" != "amd64" ]]; }; then
+        echo "Unexpected package downloaded from Google Chrome URL: " \
+             "$package_name $package_architecture" >&2
+        status=1
+    fi
+
+    if (( status == 0 )); then
+        echo "Installing Google Chrome $package_version."
+        "${APT_GET[@]}" install "$chrome_deb" || status=$?
+    fi
+
+    rm -f -- "$chrome_deb"
+    return "$status"
+}
+
+show_progress 75 "Install Google Chrome"
+install_google_chrome
 
 # add everything needed to run with clang
 show_progress 78 "Install the Clang toolchain"

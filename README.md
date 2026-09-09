@@ -4,23 +4,30 @@
 
 This repository contains an unattended installer for Ubuntu 24.04 LTS and
 Ubuntu 26.04 LTS. It installs the complete KDE desktop, selects LightDM with
-its standard GTK greeter as the login manager, installs the standard software
-used by the group, and configures the supplied wallpapers.
+Slick Greeter as the login manager, installs the standard software used by the
+group—including Google Chrome—and configures the supplied wallpapers.
 
 - LightDM login background: `wallpaper/solidsgroup.png`
 - Desktop background: `wallpaper/cubes.png`
+- Plasma lock-screen background: `wallpaper/cubes.png`
 
-LightDM uses its packaged GTK greeter rather than a custom theme. Its login
-panel is placed toward the left so the wallpaper's centered logo remains
-visible, and the on-screen keyboard is disabled by default.
+LightDM uses its packaged Slick Greeter with KDE's Breeze Dark styling rather
+than a custom theme. Plasma is selected by default, and the greeter provides a
+session chooser for selecting another installed desktop. The on-screen
+keyboard is disabled by default.
 
 The desktop wallpaper is applied once per user and desktop environment. A
 user can change it afterward without the installer resetting it at every
-login.
+login. The Plasma lock-screen wallpaper is likewise applied once per user and
+can be changed afterward.
+
+Google Chrome Stable is downloaded directly from Google's official Linux
+package URL during installation and installed noninteractively.
 
 ## Requirements
 
 - Ubuntu 24.04 LTS or Ubuntu 26.04 LTS
+- An amd64/x86-64 computer, as required by Google Chrome for Linux
 - Internet access
 - An account with `sudo` access
 - `curl` for the no-clone command below
@@ -133,6 +140,11 @@ If a required step fails, the installer stops instead of continuing with a
 partially configured system. Correct the reported problem and run the same
 command again; package installation and configuration steps are safe to
 repeat.
+
+Pressing `Ctrl+C` cancels the run with status 130. The active checklist item is
+marked as cancelled, later items remain pending, and completed changes are not
+rolled back. Running the installer again safely resumes its idempotent setup
+steps.
 
 ## After installation
 

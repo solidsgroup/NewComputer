@@ -7,6 +7,11 @@ printf '%s' "$command_name" >>"$CI_COMMAND_TRACE"
 printf ' %q' "$@" >>"$CI_COMMAND_TRACE"
 printf '\n' >>"$CI_COMMAND_TRACE"
 
+if [[ "${CI_INTERRUPT_ON_COMMAND:-}" == "$command_name" ]]; then
+    kill -INT "$PPID"
+    exit 130
+fi
+
 case "$command_name" in
     apt-get)
         if [[ "${CI_VALIDATE_APT:-0}" == "1" ]]; then
@@ -31,6 +36,34 @@ case "$command_name" in
     debconf-set-selections)
         # Consume the preseed data supplied on stdin.
         cat >/dev/null
+        ;;
+    curl)
+        output_file=""
+        while (( $# > 0 )); do
+            if [[ "$1" == "--output" ]]; then
+                output_file="$2"
+                shift 2
+            else
+                shift
+            fi
+        done
+        [[ -n "$output_file" ]] && : >"$output_file"
+        ;;
+    dpkg-deb)
+        case "${3:-}" in
+            Package)
+                printf '%s\n' google-chrome-stable
+                ;;
+            Version)
+                printf '%s\n' 1.2.3-test
+                ;;
+            Architecture)
+                printf '%s\n' amd64
+                ;;
+            *)
+                exit 1
+                ;;
+        esac
         ;;
     snap)
         # Make the installer exercise both Snap installation paths.
