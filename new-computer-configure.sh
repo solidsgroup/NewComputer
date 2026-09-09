@@ -36,8 +36,6 @@ readonly -a UI_STEPS=(
     "Install standard software and development tools"
     "Ensure Google Chrome is installed"
     "Install the Clang toolchain"
-    "Start Snap support"
-    "Install Slack"
     "Configure remote SSH access"
     "Remove unneeded packages"
 )
@@ -614,7 +612,6 @@ show_progress 62 "Install standard software and development tools"
     texlive-latex-base \
     texlive-publishers \
     texlive-science \
-    snapd \
     ufw
 
 install_google_chrome() {
@@ -675,32 +672,6 @@ install_google_chrome
 # add everything needed to run with clang
 show_progress 78 "Install the Clang toolchain"
 "${APT_GET[@]}" install clang clangd libstdc++-14-dev libgfortran-14-dev
-
-show_progress 84 "Start Snap support"
-systemctl enable --now snapd.socket
-timeout 300 snap wait system seed.loaded || true
-
-install_snap() {
-    local snap_name="$1"
-
-    if snap list "$snap_name" >/dev/null 2>&1; then
-        echo "Snap already installed: $snap_name"
-        return 0
-    fi
-
-    for attempt in 1 2 3; do
-        if snap install "$snap_name"; then
-            return 0
-        fi
-        echo "Snap install failed for $snap_name (attempt $attempt of 3); retrying."
-        sleep $((attempt * 10))
-    done
-
-    return 1
-}
-
-show_progress 88 "Install Slack"
-install_snap slack
 
 # Activate remote SSH login
 show_progress 97 "Configure remote SSH access"

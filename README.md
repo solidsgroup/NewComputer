@@ -70,7 +70,7 @@ blue and orange colors. Completed, active, pending, and failed phases remain
 visible while the installer runs. The percentage marks the overall phase
 position rather than package download bytes.
 
-Verbose APT, Snap, and configuration output is hidden from the interface and
+Verbose APT and configuration output is hidden from the interface and
 written to `/var/log/new-computer-configure.log`. If the installer stops, the
 failed checklist item and the relevant script line are shown alongside the log
 location. Set the standard `NO_COLOR` environment variable if you want the
@@ -126,8 +126,8 @@ available at:
 GitHub Actions smoke-tests the complete installer flow on native Ubuntu 24.04
 and Ubuntu 26.04 runners after every push and at 09:23 UTC on the first day of
 each month. APT resolves every requested operation in simulation mode against
-fresh package indexes, and the Snap Store listings are checked without
-installing the applications. Service and firewall operations are recorded and
+fresh package indexes, and the Google Chrome package URL is checked without
+installing the application. Service and firewall operations are recorded and
 verified rather than applied; generated configuration files and installed
 wallpaper assets are created and checked on the disposable runner.
 
@@ -139,8 +139,6 @@ line where the installer failed. The installer automatically:
 - answers package-manager prompts noninteractively;
 - retains existing locally modified package configuration files;
 - waits for temporary APT locks and retries network downloads;
-- skips Snaps that are already installed;
-- retries failed Snap installations; and
 - prevents two copies of the installer from running simultaneously.
 
 If a required step fails, the installer stops instead of continuing with a

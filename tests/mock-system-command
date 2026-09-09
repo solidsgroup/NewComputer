@@ -72,12 +72,6 @@ case "$command_name" in
         fi
         exit 1
         ;;
-    snap)
-        # Make the installer exercise both Snap installation paths.
-        if [[ "${1:-}" == "list" ]]; then
-            exit 1
-        fi
-        ;;
 esac
 
 exit 0

@@ -38,7 +38,6 @@ readonly -a MOCKED_COMMANDS=(
     dpkg-reconfigure
     ln
     systemctl
-    snap
     ufw
 )
 
@@ -145,8 +144,6 @@ assert_file_contains \
 assert_trace_matches '^apt-get .* install /tmp/google-chrome-stable\..*\.deb$'
 assert_trace_matches '^apt-get .* install .*clang.*clangd'
 assert_trace_matches '^apt-get .* autoremove$'
-assert_file_contains "systemctl enable --now snapd.socket" "$COMMAND_TRACE"
-assert_file_contains "snap install slack" "$COMMAND_TRACE"
 assert_file_contains "ufw allow OpenSSH" "$COMMAND_TRACE"
 
 # File-producing portions run for real on the disposable hosted runner.

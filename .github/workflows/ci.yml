@@ -34,7 +34,6 @@ jobs:
       - name: Refresh package indexes and check external downloads
         run: |
           sudo apt-get update
-          snap info slack >/dev/null
           curl --fail --location --silent --show-error --head \
             https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
             >/dev/null
