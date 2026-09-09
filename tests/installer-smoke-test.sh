@@ -46,11 +46,21 @@ for command_name in "${MOCKED_COMMANDS[@]}"; do
         "$MOCK_BIN_DIR/$command_name"
 done
 
-sudo env \
-    "PATH=$MOCK_BIN_DIR:$PATH" \
-    "CI_COMMAND_TRACE=$COMMAND_TRACE" \
-    "CI_VALIDATE_APT=${CI_VALIDATE_APT:-0}" \
-    bash "$REPOSITORY_DIR/new-computer-configure.sh" >"$UI_OUTPUT" 2>&1
+if sudo env \
+        "PATH=$MOCK_BIN_DIR:$PATH" \
+        "CI_COMMAND_TRACE=$COMMAND_TRACE" \
+        "CI_VALIDATE_APT=${CI_VALIDATE_APT:-0}" \
+        bash "$REPOSITORY_DIR/new-computer-configure.sh" \
+        >"$UI_OUTPUT" 2>&1; then
+    :
+else
+    installer_status=$?
+    printf '%s\n' 'Installer output:' >&2
+    cat "$UI_OUTPUT" >&2
+    printf '%s\n' 'Installer log:' >&2
+    sudo cat /var/log/new-computer-configure.log >&2 || true
+    exit "$installer_status"
+fi
 
 assert_file_contains() {
     local expected="$1"

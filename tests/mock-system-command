@@ -16,9 +16,16 @@ case "$command_name" in
     apt-get)
         if [[ "${CI_VALIDATE_APT:-0}" == "1" ]]; then
             for argument in "$@"; do
-                # The workflow already refreshed the real indexes. All other
-                # operations go through APT's dependency-resolving simulation.
+                # The workflow already refreshed the real indexes. Repository
+                # package operations go through APT's dependency simulation.
                 if [[ "$argument" == "update" ]]; then
+                    exit 0
+                fi
+
+                # curl creates an empty stand-in for Chrome's large .deb. The
+                # workflow checks the real download URL separately, so record
+                # this install without asking APT to parse the placeholder.
+                if [[ "$argument" == /tmp/google-chrome-stable.*.deb ]]; then
                     exit 0
                 fi
             done
