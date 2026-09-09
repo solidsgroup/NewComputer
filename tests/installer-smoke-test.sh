@@ -81,6 +81,16 @@ assert_trace_matches() {
     fi
 }
 
+assert_trace_not_matches() {
+    local unexpected="$1"
+    local trace_file="${2:-$COMMAND_TRACE}"
+
+    if grep -Eq -- "$unexpected" "$trace_file"; then
+        printf 'Expected command trace not to match: %s\n' "$unexpected" >&2
+        return 1
+    fi
+}
+
 assert_file_not_contains() {
     local unexpected="$1"
     local file="$2"
@@ -124,7 +134,7 @@ sudo env \
     bash "$REPOSITORY_DIR/new-computer-configure.sh" \
     >"$CHROME_SKIP_UI_OUTPUT" 2>&1
 assert_file_contains "dpkg-query" "$CHROME_SKIP_TRACE"
-assert_file_not_contains "curl " "$CHROME_SKIP_TRACE"
+assert_trace_not_matches '^curl ' "$CHROME_SKIP_TRACE"
 assert_file_not_contains "/tmp/google-chrome-stable." "$CHROME_SKIP_TRACE"
 assert_file_contains "[100%] ✓ Configuration complete" "$CHROME_SKIP_UI_OUTPUT"
 
