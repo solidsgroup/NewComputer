@@ -65,6 +65,13 @@ case "$command_name" in
                 ;;
         esac
         ;;
+    dpkg-query)
+        if [[ "${CI_GOOGLE_CHROME_INSTALLED:-0}" == "1" ]]; then
+            printf '%s\n' installed
+            exit 0
+        fi
+        exit 1
+        ;;
     snap)
         # Make the installer exercise both Snap installation paths.
         if [[ "${1:-}" == "list" ]]; then

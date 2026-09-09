@@ -9,6 +9,8 @@ readonly MOCK_BIN_DIR="$TEST_TEMP_DIR/bin"
 readonly COMMAND_TRACE="$TEST_TEMP_DIR/commands.log"
 readonly UI_OUTPUT="$TEST_TEMP_DIR/ui.log"
 readonly INTERRUPT_UI_OUTPUT="$TEST_TEMP_DIR/interrupt-ui.log"
+readonly CHROME_SKIP_TRACE="$TEST_TEMP_DIR/chrome-skip-commands.log"
+readonly CHROME_SKIP_UI_OUTPUT="$TEST_TEMP_DIR/chrome-skip-ui.log"
 
 cleanup() {
     rm -rf -- "$TEST_TEMP_DIR"
@@ -32,6 +34,7 @@ readonly -a MOCKED_COMMANDS=(
     curl
     debconf-set-selections
     dpkg-deb
+    dpkg-query
     dpkg-reconfigure
     ln
     systemctl
@@ -102,6 +105,20 @@ assert_file_contains "[  5%] ■ Cancelled: Refresh Ubuntu package metadata" \
 assert_file_contains "Configuration cancelled by SIGINT" "$INTERRUPT_UI_OUTPUT"
 assert_file_not_contains "[100%] ✓ Configuration complete" "$INTERRUPT_UI_OUTPUT"
 
+# A repeat installation must not download the large Chrome package again.
+: >"$CHROME_SKIP_TRACE"
+sudo env \
+    "PATH=$MOCK_BIN_DIR:$PATH" \
+    "CI_COMMAND_TRACE=$CHROME_SKIP_TRACE" \
+    "CI_VALIDATE_APT=0" \
+    "CI_GOOGLE_CHROME_INSTALLED=1" \
+    bash "$REPOSITORY_DIR/new-computer-configure.sh" \
+    >"$CHROME_SKIP_UI_OUTPUT" 2>&1
+assert_file_contains "dpkg-query" "$CHROME_SKIP_TRACE"
+assert_file_not_contains "curl " "$CHROME_SKIP_TRACE"
+assert_file_not_contains "/tmp/google-chrome-stable." "$CHROME_SKIP_TRACE"
+assert_file_contains "[100%] ✓ Configuration complete" "$CHROME_SKIP_UI_OUTPUT"
+
 # The non-interactive Actions log should contain the compact checklist while
 # verbose command activity remains in the persistent installer log.
 assert_file_contains \
@@ -114,7 +131,7 @@ assert_file_contains "[ 62%] Install standard software and development tools" \
     /var/log/new-computer-configure.log
 assert_file_contains "[ 55%] Configure the Slick Greeter login screen" \
     /var/log/new-computer-configure.log
-assert_file_contains "[ 75%] Install Google Chrome" \
+assert_file_contains "[ 75%] Ensure Google Chrome is installed" \
     /var/log/new-computer-configure.log
 
 # Verify the installer requested each important external operation.

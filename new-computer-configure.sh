@@ -34,7 +34,7 @@ readonly -a UI_STEPS=(
     "Install desktop and login wallpapers"
     "Configure the Slick Greeter login screen"
     "Install standard software and development tools"
-    "Install Google Chrome"
+    "Ensure Google Chrome is installed"
     "Install the Clang toolchain"
     "Start Snap support"
     "Install Slack"
@@ -625,6 +625,12 @@ install_google_chrome() {
     local package_version=""
     local status=0
 
+    if dpkg-query -W -f='${db:Status-Status}\n' google-chrome-stable \
+        2>/dev/null | grep -Fxq installed; then
+        echo "Google Chrome is already installed; skipping the package download."
+        return 0
+    fi
+
     if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
         echo "Google Chrome is only available from Google for amd64 systems." >&2
         return 1
@@ -664,7 +670,7 @@ install_google_chrome() {
     return "$status"
 }
 
-show_progress 75 "Install Google Chrome"
+show_progress 75 "Ensure Google Chrome is installed"
 install_google_chrome
 
 # add everything needed to run with clang

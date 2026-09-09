@@ -22,7 +22,9 @@ login. The Plasma lock-screen wallpaper is likewise applied once per user and
 can be changed afterward.
 
 Google Chrome Stable is downloaded directly from Google's official Linux
-package URL during installation and installed noninteractively.
+package URL during its first installation and installed noninteractively.
+Later installer runs detect the installed package and skip that large
+download; the normal APT upgrade phase handles available Chrome updates.
 
 ## Requirements
 
