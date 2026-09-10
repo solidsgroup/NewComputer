@@ -21,6 +21,14 @@ user can change it afterward without the installer resetting it at every
 login. The Plasma lock-screen wallpaper is likewise applied once per user and
 can be changed afterward.
 
+KDE defaults are applied to every existing human account and once at the first
+Plasma login for future accounts. Plasma uses Breeze Dark, locks after 30
+minutes of inactivity, and never turns off the display or automatically
+suspends or shuts down on AC, battery, or low battery. Closing a laptop lid
+also takes no action. The separate critical-battery action is deliberately
+left intact, as are explicit power-button actions. Users can change these
+defaults afterward.
+
 Google Chrome Stable is downloaded directly from Google's official Linux
 package URL during its first installation and installed noninteractively.
 Later installer runs detect the installed package and skip that large
@@ -33,16 +41,17 @@ download; the normal APT upgrade phase handles available Chrome updates.
 - Internet access
 - An account with `sudo` access
 - `curl` for the no-clone command below
-- The complete repository, including the `wallpaper` directory, for a local run
+- The complete repository, including the `kde` and `wallpaper` directories,
+  for a local run
 
 The script can be started from any directory because it locates its assets
 relative to its own path.
 
 ## Run directly from GitHub
 
-Copy and paste this one-liner. The bootstrap downloads the installer and both
-wallpapers, runs the installer, and removes its temporary files afterward. No
-Git clone or checkout is required.
+Copy and paste this one-liner. The bootstrap downloads the installer, its KDE
+settings helper, and both wallpapers; it runs the installer and removes its
+temporary files afterward. No Git clone or checkout is required.
 
 ```bash
 curl -fsSL -H 'Accept: application/vnd.github.raw+json' 'https://api.github.com/repos/solidsgroup/NewComputer/contents/install.sh?ref=master' | sudo bash

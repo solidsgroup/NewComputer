@@ -1,0 +1,126 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+readonly CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+readonly SETTINGS_MARKER="$CONFIG_HOME/.solids-kde-settings-v1"
+readonly DARK_THEME="org.kde.breezedark.desktop"
+SESSION_MODE=false
+SYSTEM_DEFAULTS_MODE=false
+
+case "${1:---config-only}" in
+    --config-only)
+        ;;
+    --system-defaults)
+        SYSTEM_DEFAULTS_MODE=true
+        ;;
+    --session)
+        SESSION_MODE=true
+        [[ -e "$SETTINGS_MARKER" ]] && exit 0
+        ;;
+    *)
+        echo "Usage: $0 [--config-only|--system-defaults|--session]" >&2
+        exit 2
+        ;;
+esac
+
+KWRITE_CONFIG=""
+for candidate in kwriteconfig6 kwriteconfig5; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        KWRITE_CONFIG="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$KWRITE_CONFIG" ]]; then
+    echo "Neither kwriteconfig6 nor kwriteconfig5 is available." >&2
+    exit 1
+fi
+
+mkdir -p "$CONFIG_HOME"
+
+write_config() {
+    local file="$1"
+    shift
+    "$KWRITE_CONFIG" --file "$file" "$@"
+}
+
+apply_dark_theme() {
+    local theme_command
+
+    for theme_command in plasma-apply-lookandfeel lookandfeeltool; do
+        if command -v "$theme_command" >/dev/null 2>&1 && \
+           "$theme_command" --apply "$DARK_THEME"; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Applying a global theme may replace other look-and-feel defaults. Do it
+# first, then write the specific Solids Group settings below.
+if [[ "$SESSION_MODE" == true ]]; then
+    apply_dark_theme || true
+fi
+
+write_config "$CONFIG_HOME/kdeglobals" \
+    --group KDE --key LookAndFeelPackage "$DARK_THEME"
+write_config "$CONFIG_HOME/kdeglobals" \
+    --group General --key ColorScheme BreezeDark
+
+write_config "$CONFIG_HOME/kscreenlockerrc" \
+    --group Daemon --key Autolock --type bool true
+write_config "$CONFIG_HOME/kscreenlockerrc" \
+    --group Daemon --key Timeout 30
+write_config "$CONFIG_HOME/kscreenlockerrc" \
+    --group Greeter --key WallpaperPlugin org.kde.image
+write_config "$CONFIG_HOME/kscreenlockerrc" \
+    --group Greeter --group Wallpaper --group org.kde.image --group General \
+    --key Image /usr/share/backgrounds/cubes.png
+write_config "$CONFIG_HOME/kscreenlockerrc" \
+    --group Greeter --group Wallpaper --group org.kde.image --group General \
+    --key PreviewImage /usr/share/backgrounds/cubes.png
+
+for profile in AC Battery LowBattery; do
+    # Plasma 6 profile settings.
+    write_config "$CONFIG_HOME/powerdevilrc" \
+        --group "$profile" --group Display \
+        --key TurnOffDisplayWhenIdle --type bool false
+    write_config "$CONFIG_HOME/powerdevilrc" \
+        --group "$profile" --group SuspendAndShutdown \
+        --key AutoSuspendAction 0
+    write_config "$CONFIG_HOME/powerdevilrc" \
+        --group "$profile" --group SuspendAndShutdown \
+        --key LidAction 0
+
+    if [[ "$SYSTEM_DEFAULTS_MODE" != true && \
+          -e "$CONFIG_HOME/powermanagementprofilesrc" ]]; then
+        # Preserve Plasma 5's generated hardware-aware profile and edit it
+        # only after it exists. Creating a partial profile before PowerDevil
+        # starts would suppress generation of unrelated defaults such as the
+        # power-button action. Without idleTime, these actions register no
+        # timeout; lidAction=0 means no action.
+        write_config "$CONFIG_HOME/powermanagementprofilesrc" \
+            --group "$profile" --group DPMSControl --key idleTime --delete
+        write_config "$CONFIG_HOME/powermanagementprofilesrc" \
+            --group "$profile" --group SuspendSession --key idleTime --delete
+        write_config "$CONFIG_HOME/powermanagementprofilesrc" \
+            --group "$profile" --group SuspendSession --key suspendType --delete
+        write_config "$CONFIG_HOME/powermanagementprofilesrc" \
+            --group "$profile" --group HandleButtonEvents --key lidAction 0
+    fi
+done
+
+if [[ "$SESSION_MODE" == true ]]; then
+    for qdbus_command in qdbus6 qdbus qdbus-qt5; do
+        if command -v "$qdbus_command" >/dev/null 2>&1 && \
+           "$qdbus_command" org.kde.Solid.PowerManagement \
+               /org/kde/Solid/PowerManagement \
+               org.kde.Solid.PowerManagement.reparseConfiguration; then
+            break
+        fi
+    done
+
+    touch "$SETTINGS_MARKER"
+fi

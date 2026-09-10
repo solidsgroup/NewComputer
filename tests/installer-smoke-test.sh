@@ -11,6 +11,22 @@ readonly UI_OUTPUT="$TEST_TEMP_DIR/ui.log"
 readonly INTERRUPT_UI_OUTPUT="$TEST_TEMP_DIR/interrupt-ui.log"
 readonly CHROME_SKIP_TRACE="$TEST_TEMP_DIR/chrome-skip-commands.log"
 readonly CHROME_SKIP_UI_OUTPUT="$TEST_TEMP_DIR/chrome-skip-ui.log"
+readonly KDE_PRISTINE_CONFIG="$TEST_TEMP_DIR/kde-pristine-config"
+readonly KDE_PRISTINE_TRACE="$TEST_TEMP_DIR/kde-pristine-commands.log"
+readonly KDE_SESSION_CONFIG="$TEST_TEMP_DIR/kde-session-config"
+
+case "$EXPECTED_UBUNTU_VERSION" in
+    24.04)
+        readonly KWRITE_CONFIG_COMMAND="kwriteconfig5"
+        readonly THEME_COMMAND="lookandfeeltool"
+        readonly QDBUS_COMMAND="qdbus"
+        ;;
+    26.04)
+        readonly KWRITE_CONFIG_COMMAND="kwriteconfig6"
+        readonly THEME_COMMAND="plasma-apply-lookandfeel"
+        readonly QDBUS_COMMAND="qdbus6"
+        ;;
+esac
 
 cleanup() {
     rm -rf -- "$TEST_TEMP_DIR"
@@ -37,6 +53,10 @@ readonly -a MOCKED_COMMANDS=(
     dpkg-query
     dpkg-reconfigure
     ln
+    "$KWRITE_CONFIG_COMMAND"
+    "$THEME_COMMAND"
+    "$QDBUS_COMMAND"
+    runuser
     systemctl
     ufw
 )
@@ -150,6 +170,9 @@ assert_file_contains "[ 62%] Install standard software and development tools" \
     /var/log/new-computer-configure.log
 assert_file_contains "[ 55%] Configure the Slick Greeter login screen" \
     /var/log/new-computer-configure.log
+assert_file_contains \
+    "[ 52%] Configure KDE power, lock screen, and dark theme defaults" \
+    /var/log/new-computer-configure.log
 assert_file_contains "[ 75%] Ensure Google Chrome is installed" \
     /var/log/new-computer-configure.log
 
@@ -165,13 +188,34 @@ assert_trace_matches '^apt-get .* install /tmp/google-chrome-stable\..*\.deb$'
 assert_trace_matches '^apt-get .* install .*clang.*clangd'
 assert_trace_matches '^apt-get .* autoremove$'
 assert_file_contains "ufw allow OpenSSH" "$COMMAND_TRACE"
+for profile in AC Battery LowBattery; do
+    assert_file_contains \
+        "$KWRITE_CONFIG_COMMAND --file /etc/xdg/powerdevilrc --group $profile --group Display --key TurnOffDisplayWhenIdle --type bool false" \
+        "$COMMAND_TRACE"
+    assert_file_contains \
+        "$KWRITE_CONFIG_COMMAND --file /etc/xdg/powerdevilrc --group $profile --group SuspendAndShutdown --key AutoSuspendAction 0" \
+        "$COMMAND_TRACE"
+    assert_file_contains \
+        "$KWRITE_CONFIG_COMMAND --file /etc/xdg/powerdevilrc --group $profile --group SuspendAndShutdown --key LidAction 0" \
+        "$COMMAND_TRACE"
+done
+assert_file_contains \
+    "$KWRITE_CONFIG_COMMAND --file /etc/xdg/kdeglobals --group KDE --key LookAndFeelPackage org.kde.breezedark.desktop" \
+    "$COMMAND_TRACE"
+assert_trace_matches '^runuser -u .*set-solids-kde-settings --config-only$'
+assert_trace_not_matches 'BatteryCriticalAction'
+assert_trace_not_matches '/etc/xdg/powermanagementprofilesrc'
 
 # File-producing portions run for real on the disposable hosted runner.
+assert_file_contains '"kde/set-solids-kde-settings"' \
+    "$REPOSITORY_DIR/install.sh"
 cmp "$REPOSITORY_DIR/wallpaper/solidsgroup.png" \
     /usr/share/backgrounds/solidsgroup.png
 cmp "$REPOSITORY_DIR/wallpaper/cubes.png" /usr/share/backgrounds/cubes.png
 assert_file_contains "WallpaperPlugin=org.kde.image" \
     /etc/xdg/kscreenlockerrc
+assert_file_contains "Autolock=true" /etc/xdg/kscreenlockerrc
+assert_file_contains "Timeout=30" /etc/xdg/kscreenlockerrc
 assert_file_contains "Image=/usr/share/backgrounds/cubes.png" \
     /etc/xdg/kscreenlockerrc
 assert_file_contains "greeter-session=slick-greeter" \
@@ -188,10 +232,50 @@ assert_file_contains "onscreen-keyboard=false" \
     /etc/lightdm/slick-greeter.conf
 assert_file_contains "Exec=/usr/local/bin/set-default-desktop-wallpaper" \
     /etc/xdg/autostart/set-default-desktop-wallpaper.desktop
-assert_file_contains 'LOCK_MARKER="$HOME/.config/.cubes-plasma-lock-screen-set"' \
+assert_file_contains "/usr/local/bin/set-solids-kde-settings --session" \
     /usr/local/bin/set-default-desktop-wallpaper
-assert_file_contains "kwriteconfig6 kwriteconfig5" \
-    /usr/local/bin/set-default-desktop-wallpaper
+bash -n /usr/local/bin/set-solids-kde-settings
 bash -n /usr/local/bin/set-default-desktop-wallpaper
+
+# Do not create an incomplete legacy profile before Plasma 5 has generated its
+# hardware-aware defaults, including the user's explicit power-button action.
+: >"$KDE_PRISTINE_TRACE"
+HOME="$TEST_TEMP_DIR/home" XDG_CONFIG_HOME="$KDE_PRISTINE_CONFIG" \
+    PATH="$MOCK_BIN_DIR:$PATH" CI_COMMAND_TRACE="$KDE_PRISTINE_TRACE" \
+    /usr/local/bin/set-solids-kde-settings --config-only
+assert_trace_not_matches 'powermanagementprofilesrc' "$KDE_PRISTINE_TRACE"
+
+# Exercise the first-login path used by future accounts. It must apply the
+# version-appropriate dark-theme command, preserve an already generated Plasma
+# 5 profile while changing its idle actions, reload PowerDevil, and mark
+# success.
+install -Dm600 /dev/null \
+    "$KDE_SESSION_CONFIG/powermanagementprofilesrc"
+HOME="$TEST_TEMP_DIR/home" XDG_CONFIG_HOME="$KDE_SESSION_CONFIG" \
+    PATH="$MOCK_BIN_DIR:$PATH" CI_COMMAND_TRACE="$COMMAND_TRACE" \
+    /usr/local/bin/set-solids-kde-settings --session
+[[ -e "$KDE_SESSION_CONFIG/.solids-kde-settings-v1" ]]
+assert_file_contains \
+    "$THEME_COMMAND --apply org.kde.breezedark.desktop" "$COMMAND_TRACE"
+assert_file_contains \
+    "$QDBUS_COMMAND org.kde.Solid.PowerManagement /org/kde/Solid/PowerManagement org.kde.Solid.PowerManagement.reparseConfiguration" \
+    "$COMMAND_TRACE"
+for profile in AC Battery LowBattery; do
+    assert_file_contains \
+        "$KWRITE_CONFIG_COMMAND --file $KDE_SESSION_CONFIG/powermanagementprofilesrc --group $profile --group DPMSControl --key idleTime --delete" \
+        "$COMMAND_TRACE"
+    assert_file_contains \
+        "$KWRITE_CONFIG_COMMAND --file $KDE_SESSION_CONFIG/powermanagementprofilesrc --group $profile --group SuspendSession --key idleTime --delete" \
+        "$COMMAND_TRACE"
+    assert_file_contains \
+        "$KWRITE_CONFIG_COMMAND --file $KDE_SESSION_CONFIG/powermanagementprofilesrc --group $profile --group SuspendSession --key suspendType --delete" \
+        "$COMMAND_TRACE"
+    assert_file_contains \
+        "$KWRITE_CONFIG_COMMAND --file $KDE_SESSION_CONFIG/powermanagementprofilesrc --group $profile --group HandleButtonEvents --key lidAction 0" \
+        "$COMMAND_TRACE"
+done
+assert_trace_not_matches 'BatteryCriticalAction'
+assert_trace_not_matches \
+    '(^| )(powerButtonAction|PowerButtonAction|powerDownAction|PowerDownAction)( |$)'
 
 printf 'Installer smoke test passed on Ubuntu %s.\n' "$VERSION_ID"

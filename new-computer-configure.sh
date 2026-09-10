@@ -11,6 +11,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOGIN_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/solidsgroup.png"
 DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
+KDE_SETTINGS_SOURCE="$SCRIPT_DIR/kde/set-solids-kde-settings"
 GOOGLE_CHROME_DEB_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
 LOG_FILE="/var/log/new-computer-configure.log"
 FAILED_LINE="unknown"
@@ -32,6 +33,7 @@ readonly -a UI_STEPS=(
     "Install KDE Plasma and LightDM"
     "Install fonts"
     "Install desktop and login wallpapers"
+    "Configure KDE power, lock screen, and dark theme defaults"
     "Configure the Slick Greeter login screen"
     "Install standard software and development tools"
     "Ensure Google Chrome is installed"
@@ -45,7 +47,10 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-for required_file in "$LOGIN_WALLPAPER_SOURCE" "$DESKTOP_WALLPAPER_SOURCE"; do
+for required_file in \
+    "$LOGIN_WALLPAPER_SOURCE" \
+    "$DESKTOP_WALLPAPER_SOURCE" \
+    "$KDE_SETTINGS_SOURCE"; do
     if [[ ! -r "$required_file" ]]; then
         echo "Required file not found: $required_file"
         exit 1
@@ -361,10 +366,14 @@ show_progress 47 "Install desktop and login wallpapers"
 install -Dm644 "$LOGIN_WALLPAPER_SOURCE" /usr/share/backgrounds/solidsgroup.png
 install -Dm644 "$DESKTOP_WALLPAPER_SOURCE" /usr/share/backgrounds/cubes.png
 
-# Supply a system-wide Plasma lock-screen default. The per-user initializer
-# below also applies it once so existing accounts with an older value receive
-# the group default without preventing later user customization.
+# Supply system-wide Plasma lock-screen defaults. Timeout is stored in minutes
+# by both Plasma 5 and Plasma 6. The screen remains on after it locks because
+# the PowerDevil display-off action is disabled separately below.
 cat <<'EOF' > /etc/xdg/kscreenlockerrc
+[Daemon]
+Autolock=true
+Timeout=30
+
 [Greeter]
 WallpaperPlugin=org.kde.image
 
@@ -372,6 +381,46 @@ WallpaperPlugin=org.kde.image
 Image=/usr/share/backgrounds/cubes.png
 PreviewImage=/usr/share/backgrounds/cubes.png
 EOF
+
+show_progress 52 "Configure KDE power, lock screen, and dark theme defaults"
+
+# Apply settings through KConfig so existing unrelated preferences survive.
+# Plasma 6 reads profile groups in powerdevilrc. Existing Plasma 5 profiles in
+# powermanagementprofilesrc are updated without creating an incomplete profile
+# before PowerDevil can generate its other hardware-aware defaults.
+# BatteryCriticalAction intentionally remains untouched so a laptop can still
+# take its configured emergency action at critical charge.
+install -Dm755 "$KDE_SETTINGS_SOURCE" /usr/local/bin/set-solids-kde-settings
+
+# /etc/xdg supplies defaults before a per-user file exists. Apply the same
+# values directly to every existing human account. The session initializer
+# below finishes Plasma 5 configuration after PowerDevil has generated a
+# profile, covers future accounts, and refreshes a running session once.
+HOME=/root XDG_CONFIG_HOME=/etc/xdg \
+    /usr/local/bin/set-solids-kde-settings --system-defaults
+
+UID_MINIMUM="$(awk '$1 == "UID_MIN" { print $2; exit }' /etc/login.defs)"
+UID_MAXIMUM="$(awk '$1 == "UID_MAX" { print $2; exit }' /etc/login.defs)"
+UID_MINIMUM="${UID_MINIMUM:-1000}"
+UID_MAXIMUM="${UID_MAXIMUM:-60000}"
+
+while IFS=: read -r account_name _ account_uid account_gid _ account_home account_shell; do
+    if (( account_uid < UID_MINIMUM || account_uid > UID_MAXIMUM )) || \
+       [[ ! -d "$account_home" ]]; then
+        continue
+    fi
+    case "$account_shell" in
+        */false|*/nologin)
+            continue
+            ;;
+    esac
+
+    install -d -m700 -o "$account_uid" -g "$account_gid" \
+        "$account_home/.config"
+    runuser -u "$account_name" -- \
+        env HOME="$account_home" XDG_CONFIG_HOME="$account_home/.config" \
+        /usr/local/bin/set-solids-kde-settings --config-only
+done < <(getent passwd)
 
 # Apply cubes.png once per user for each desktop environment they use. Keeping
 # a marker per environment makes this a default without overriding later user
@@ -386,16 +435,10 @@ WALLPAPER="/usr/share/backgrounds/cubes.png"
 DESKTOP_NAME="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-unknown}}"
 SESSION_KEY="$(printf '%s' "$DESKTOP_NAME" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '-')"
 MARKER="$HOME/.config/.cubes-wallpaper-set-${SESSION_KEY:-unknown}"
-LOCK_MARKER="$HOME/.config/.cubes-plasma-lock-screen-set"
 
 mark_complete() {
     mkdir -p "$(dirname -- "$MARKER")"
     touch "$MARKER"
-}
-
-mark_lock_complete() {
-    mkdir -p "$(dirname -- "$LOCK_MARKER")"
-    touch "$LOCK_MARKER"
 }
 
 set_plasma_wallpaper() {
@@ -419,26 +462,6 @@ set_plasma_wallpaper() {
         done
 
         sleep 2
-    done
-
-    return 1
-}
-
-set_plasma_lock_screen() {
-    local kwriteconfig_command
-
-    for kwriteconfig_command in kwriteconfig6 kwriteconfig5; do
-        if command -v "$kwriteconfig_command" >/dev/null 2>&1 && \
-           "$kwriteconfig_command" --file kscreenlockerrc \
-               --group Greeter --key WallpaperPlugin org.kde.image && \
-           "$kwriteconfig_command" --file kscreenlockerrc \
-               --group Greeter --group Wallpaper --group org.kde.image \
-               --group General --key Image "$WALLPAPER" && \
-           "$kwriteconfig_command" --file kscreenlockerrc \
-               --group Greeter --group Wallpaper --group org.kde.image \
-               --group General --key PreviewImage "$WALLPAPER"; then
-            return 0
-        fi
     done
 
     return 1
@@ -492,13 +515,11 @@ set_xfce_wallpaper() {
     [[ "$changed" == true ]]
 }
 
-# The lock screen has a separate setting from the Plasma desktop wallpaper.
-# Apply it once even when an earlier installer run already set the desktop.
+# Apply KDE defaults before the wallpaper. This ordering ensures the Breeze
+# Dark look-and-feel package cannot replace the group wallpaper.
 case "$DESKTOP_NAME" in
     *KDE*|*Plasma*)
-        if [[ ! -e "$LOCK_MARKER" ]] && set_plasma_lock_screen; then
-            mark_lock_complete
-        fi
+        /usr/local/bin/set-solids-kde-settings --session || true
         ;;
 esac
 

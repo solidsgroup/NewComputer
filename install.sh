@@ -7,6 +7,7 @@ readonly BRANCH="master"
 readonly COMMIT_FEED_URL="https://github.com/$REPOSITORY/commits/$BRANCH.atom"
 readonly -a INSTALLER_FILES=(
     "new-computer-configure.sh"
+    "kde/set-solids-kde-settings"
     "wallpaper/solidsgroup.png"
     "wallpaper/cubes.png"
 )
@@ -51,7 +52,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$INSTALLER_TEMP_DIR/wallpaper"
+mkdir -p "$INSTALLER_TEMP_DIR/kde" "$INSTALLER_TEMP_DIR/wallpaper"
 for relative_path in "${INSTALLER_FILES[@]}"; do
     curl \
         --fail \
