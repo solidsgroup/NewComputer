@@ -1,0 +1,188 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+readonly VISIT_INSTALL_ROOT="/opt/visit"
+readonly VISIT_COMMAND_DIRECTORY="/usr/local/bin"
+readonly VISIT_RELEASE_BASE_URL="https://github.com/visit-dav/visit/releases/download"
+readonly VISIT_PLATFORM="linux-x86_64-ubuntu24"
+readonly VISIT_RUNTIME_PLATFORM="linux-x86_64"
+readonly VISIT_CURRENT_VERSION="3.5.0"
+
+# Keep one patch release from each supported minor series. The first field is
+# the exact release and the second is LLNL's published SHA-256 checksum for its
+# Ubuntu 24 x86-64 binary distribution.
+readonly -a VISIT_RELEASES=(
+    "3.5.0 037bac788b0f6f11eb6b138a20db6afcebaf914b768a03323003a2bec89697fd"
+    "3.4.2 f1a6bf9bb97667f6b7874a2b4feea11f4e02e0bce7fa9830824ba2aa91fa6655"
+)
+
+ACTIVE_STAGE=""
+ROLLBACK_SOURCE=""
+ROLLBACK_TARGET=""
+
+cleanup() {
+    if [[ -n "$ROLLBACK_SOURCE" && -e "$ROLLBACK_SOURCE" && \
+          -n "$ROLLBACK_TARGET" && ! -e "$ROLLBACK_TARGET" ]]; then
+        mv -- "$ROLLBACK_SOURCE" "$ROLLBACK_TARGET" || true
+    fi
+    if [[ -n "$ACTIVE_STAGE" && -d "$ACTIVE_STAGE" ]]; then
+        rm -rf -- "$ACTIVE_STAGE"
+    fi
+}
+trap cleanup EXIT
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Run this installer as root." >&2
+    exit 1
+fi
+
+install -d -m755 \
+    "$VISIT_INSTALL_ROOT" \
+    "$VISIT_INSTALL_ROOT/bin" \
+    "$VISIT_INSTALL_ROOT/.launchers" \
+    "$VISIT_COMMAND_DIRECTORY"
+
+install_release() {
+    local version="$1"
+    local expected_sha256="$2"
+    local version_with_underscores="${version//./_}"
+    local archive_name="visit${version_with_underscores}.${VISIT_PLATFORM}.tar.gz"
+    local archive_url="$VISIT_RELEASE_BASE_URL/v$version/$archive_name"
+    local distribution_name="visit${version_with_underscores}.${VISIT_RUNTIME_PLATFORM}"
+    local archive
+    local distribution
+    local new_version
+    local old_version
+    local launcher_store="$VISIT_INSTALL_ROOT/.launchers/$version"
+    local installed_version="$VISIT_INSTALL_ROOT/$version"
+    local needs_version=true
+    local needs_launcher=true
+
+    if [[ -x "$installed_version/bin/internallauncher" && \
+          -x "$installed_version/$VISIT_RUNTIME_PLATFORM/bin/engine_ser" ]]; then
+        needs_version=false
+    fi
+    if [[ -x "$launcher_store/frontendlauncher" && \
+          -f "$launcher_store/frontendlauncher.py" ]]; then
+        needs_launcher=false
+    fi
+
+    if [[ "$needs_version" == false && "$needs_launcher" == false ]]; then
+        echo "VisIt $version is already installed; skipping its download."
+        return 0
+    fi
+
+    ACTIVE_STAGE="$(mktemp -d \
+        --tmpdir="$VISIT_INSTALL_ROOT" ".install-${version_with_underscores}.XXXXXX")"
+    archive="$ACTIVE_STAGE/$archive_name"
+
+    echo "Downloading LLNL VisIt $version for Ubuntu 24 x86-64."
+    curl \
+        --fail \
+        --location \
+        --silent \
+        --show-error \
+        --retry 5 \
+        --retry-delay 2 \
+        "$archive_url" \
+        --output "$archive"
+
+    printf '%s  %s\n' "$expected_sha256" "$archive" |
+        sha256sum --check --status
+
+    tar --extract --gzip --file "$archive" \
+        --directory "$ACTIVE_STAGE" --no-same-owner
+    distribution="$ACTIVE_STAGE/$distribution_name"
+
+    if [[ ! -x "$distribution/$version/bin/internallauncher" || \
+          ! -x "$distribution/$version/$VISIT_RUNTIME_PLATFORM/bin/engine_ser" || \
+          ! -x "$distribution/bin/frontendlauncher" || \
+          ! -f "$distribution/bin/frontendlauncher.py" ]]; then
+        echo "The VisIt $version archive has an unexpected layout." >&2
+        return 1
+    fi
+
+    if [[ "$needs_version" == true ]]; then
+        new_version="$distribution/$version"
+        old_version="$ACTIVE_STAGE/previous-$version"
+
+        if [[ -e "$installed_version" ]]; then
+            ROLLBACK_SOURCE="$old_version"
+            ROLLBACK_TARGET="$installed_version"
+            mv -- "$installed_version" "$old_version"
+        fi
+        if ! mv -- "$new_version" "$installed_version"; then
+            [[ -e "$old_version" ]] && mv -- "$old_version" "$installed_version"
+            ROLLBACK_SOURCE=""
+            ROLLBACK_TARGET=""
+            return 1
+        fi
+        ROLLBACK_SOURCE=""
+        ROLLBACK_TARGET=""
+        rm -rf -- "$old_version"
+
+        install -d -m755 "$installed_version/.visit/hosts"
+        printf '1;none;;%s\n' "$VISIT_RUNTIME_PLATFORM" \
+            >"$installed_version/$VISIT_RUNTIME_PLATFORM/.installinfo"
+        chmod -R a+rX "$installed_version"
+    fi
+
+    install -d -m755 "$launcher_store"
+    install -m755 "$distribution/bin/frontendlauncher" \
+        "$launcher_store/frontendlauncher"
+    install -m644 "$distribution/bin/frontendlauncher.py" \
+        "$launcher_store/frontendlauncher.py"
+
+    if [[ "$version" == "$VISIT_CURRENT_VERSION" && \
+          -d "$distribution/data" && ! -e "$VISIT_INSTALL_ROOT/data" ]]; then
+        mv -- "$distribution/data" "$VISIT_INSTALL_ROOT/data"
+        chmod -R a+rX "$VISIT_INSTALL_ROOT/data"
+    fi
+
+    rm -rf -- "$ACTIVE_STAGE"
+    ACTIVE_STAGE=""
+}
+
+for release in "${VISIT_RELEASES[@]}"; do
+    read -r version expected_sha256 <<<"$release"
+    install_release "$version" "$expected_sha256"
+done
+
+# The newest launcher's version-selection logic supports every installed
+# release. Keep the shared launcher and the unversioned command pointed at it.
+install -m755 \
+    "$VISIT_INSTALL_ROOT/.launchers/$VISIT_CURRENT_VERSION/frontendlauncher" \
+    "$VISIT_INSTALL_ROOT/bin/frontendlauncher"
+install -m644 \
+    "$VISIT_INSTALL_ROOT/.launchers/$VISIT_CURRENT_VERSION/frontendlauncher.py" \
+    "$VISIT_INSTALL_ROOT/bin/frontendlauncher.py"
+ln -sfn "$VISIT_CURRENT_VERSION" "$VISIT_INSTALL_ROOT/current"
+ln -sfn frontendlauncher "$VISIT_INSTALL_ROOT/bin/visit"
+ln -sfn "$VISIT_INSTALL_ROOT/bin/visit" "$VISIT_COMMAND_DIRECTORY/visit"
+
+cat <<'EOF' >"$VISIT_INSTALL_ROOT/bin/visit-version-launcher"
+#!/bin/bash
+
+set -Eeuo pipefail
+
+command_name="${0##*/}"
+version="${command_name#visit}"
+
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    echo "Versioned VisIt launcher must be named visitX.Y." >&2
+    exit 2
+fi
+
+exec /opt/visit/bin/visit -v "$version" "$@"
+EOF
+chmod 755 "$VISIT_INSTALL_ROOT/bin/visit-version-launcher"
+
+for release in "${VISIT_RELEASES[@]}"; do
+    read -r version _ <<<"$release"
+    minor_version="${version%.*}"
+    ln -sfn "$VISIT_INSTALL_ROOT/bin/visit-version-launcher" \
+        "$VISIT_COMMAND_DIRECTORY/visit$minor_version"
+done
+
+echo "Installed VisIt 3.5 and 3.4. Use visit, visit3.5, or visit3.4."

@@ -31,7 +31,8 @@ jobs:
       - name: Check shell syntax
         run: >-
           bash -n install.sh new-computer-configure.sh
-          kde/set-solids-kde-settings tests/installer-smoke-test.sh
+          kde/set-solids-kde-settings visit/install-visit-binaries
+          tests/installer-smoke-test.sh
 
       - name: Refresh package indexes and check external downloads
         run: |
@@ -39,6 +40,13 @@ jobs:
           curl --fail --location --silent --show-error --head \
             https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
             >/dev/null
+          for version_and_asset in \
+            '3.5.0/visit3_5_0.linux-x86_64-ubuntu24.tar.gz' \
+            '3.4.2/visit3_4_2.linux-x86_64-ubuntu24.tar.gz'; do
+            curl --fail --location --silent --show-error --head \
+              "https://github.com/visit-dav/visit/releases/download/v${version_and_asset}" \
+              >/dev/null
+          done
 
       - name: Exercise the installer
         env:

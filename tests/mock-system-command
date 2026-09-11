@@ -46,15 +46,48 @@ case "$command_name" in
         ;;
     curl)
         output_file=""
+        request_url=""
         while (( $# > 0 )); do
             if [[ "$1" == "--output" ]]; then
                 output_file="$2"
                 shift 2
+            elif [[ "$1" == http://* || "$1" == https://* ]]; then
+                request_url="$1"
+                shift
             else
                 shift
             fi
         done
-        [[ -n "$output_file" ]] && : >"$output_file"
+        if [[ -n "$output_file" && \
+              "$request_url" =~ /v([0-9]+\.[0-9]+\.[0-9]+)/visit([0-9]+_[0-9]+_[0-9]+)\.linux-x86_64-ubuntu24\.tar\.gz$ ]]; then
+            version="${BASH_REMATCH[1]}"
+            version_with_underscores="${BASH_REMATCH[2]}"
+            distribution="visit${version_with_underscores}.linux-x86_64"
+            archive_source="$(mktemp -d)"
+
+            mkdir -p \
+                "$archive_source/$distribution/bin" \
+                "$archive_source/$distribution/data" \
+                "$archive_source/$distribution/$version/bin" \
+                "$archive_source/$distribution/$version/linux-x86_64/bin"
+            printf '#!/bin/sh\nexit 0\n' \
+                >"$archive_source/$distribution/bin/frontendlauncher"
+            printf '# Synthetic CI launcher.\n' \
+                >"$archive_source/$distribution/bin/frontendlauncher.py"
+            printf '#!/bin/sh\nexit 0\n' \
+                >"$archive_source/$distribution/$version/bin/internallauncher"
+            printf '#!/bin/sh\nexit 0\n' \
+                >"$archive_source/$distribution/$version/linux-x86_64/bin/engine_ser"
+            chmod 755 \
+                "$archive_source/$distribution/bin/frontendlauncher" \
+                "$archive_source/$distribution/$version/bin/internallauncher" \
+                "$archive_source/$distribution/$version/linux-x86_64/bin/engine_ser"
+            /usr/bin/tar -czf "$output_file" \
+                -C "$archive_source" "$distribution"
+            rm -rf -- "$archive_source"
+        elif [[ -n "$output_file" ]]; then
+            : >"$output_file"
+        fi
         ;;
     dpkg-deb)
         case "${3:-}" in
@@ -78,6 +111,19 @@ case "$command_name" in
             exit 0
         fi
         exit 1
+        ;;
+    ln)
+        destination="${!#}"
+        case "$destination" in
+            /opt/visit/*|/usr/local/bin/visit*)
+                /usr/bin/ln "$@"
+                ;;
+        esac
+        ;;
+    sha256sum)
+        # The test archive is synthetic; production verifies LLNL's published
+        # digest before extracting anything.
+        cat >/dev/null
         ;;
 esac
 

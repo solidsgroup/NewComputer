@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOGIN_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/solidsgroup.png"
 DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
 KDE_SETTINGS_SOURCE="$SCRIPT_DIR/kde/set-solids-kde-settings"
+VISIT_INSTALLER_SOURCE="$SCRIPT_DIR/visit/install-visit-binaries"
 GOOGLE_CHROME_DEB_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
 LOG_FILE="/var/log/new-computer-configure.log"
 FAILED_LINE="unknown"
@@ -36,6 +37,7 @@ readonly -a UI_STEPS=(
     "Configure KDE power, lock screen, and dark theme defaults"
     "Configure the Slick Greeter login screen"
     "Install standard software and development tools"
+    "Install LLNL VisIt 3.5 and 3.4"
     "Ensure Google Chrome is installed"
     "Install the Clang toolchain"
     "Configure remote SSH access"
@@ -50,7 +52,8 @@ fi
 for required_file in \
     "$LOGIN_WALLPAPER_SOURCE" \
     "$DESKTOP_WALLPAPER_SOURCE" \
-    "$KDE_SETTINGS_SOURCE"; do
+    "$KDE_SETTINGS_SOURCE" \
+    "$VISIT_INSTALLER_SOURCE"; do
     if [[ ! -r "$required_file" ]]; then
         echo "Required file not found: $required_file"
         exit 1
@@ -616,6 +619,7 @@ EOF
 show_progress 62 "Install standard software and development tools"
 "${APT_GET[@]}" install \
     emacs \
+    ffmpeg \
     mpich \
     python-is-python3 \
     git \
@@ -634,6 +638,13 @@ show_progress 62 "Install standard software and development tools"
     texlive-publishers \
     texlive-science \
     ufw
+
+# Install LLNL's official release binary distributions directly. This avoids
+# the interactive visit-install script while retaining side-by-side versions.
+show_progress 72 "Install LLNL VisIt 3.5 and 3.4"
+install -Dm755 "$VISIT_INSTALLER_SOURCE" \
+    /usr/local/sbin/install-visit-binaries
+/usr/local/sbin/install-visit-binaries
 
 install_google_chrome() {
     local chrome_deb
@@ -687,11 +698,11 @@ install_google_chrome() {
     return "$status"
 }
 
-show_progress 75 "Ensure Google Chrome is installed"
+show_progress 78 "Ensure Google Chrome is installed"
 install_google_chrome
 
 # add everything needed to run with clang
-show_progress 78 "Install the Clang toolchain"
+show_progress 82 "Install the Clang toolchain"
 "${APT_GET[@]}" install clang clangd libstdc++-14-dev libgfortran-14-dev
 
 # Activate remote SSH login

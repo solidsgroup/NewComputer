@@ -7,6 +7,13 @@ Ubuntu 26.04 LTS. It installs the complete KDE desktop, selects LightDM with
 Slick Greeter as the login manager, installs the standard software used by the
 group—including Google Chrome—and configures the supplied wallpapers.
 
+LLNL VisIt is installed from its official precompiled Ubuntu 24 binary
+distributions. The maintained 3.5 and 3.4 series are installed side by side:
+`visit` and `visit3.5` launch VisIt 3.5.0, while `visit3.4` launches VisIt
+3.4.2. The archives are verified against LLNL's published SHA-256 checksums,
+and an already installed version is not downloaded again. FFmpeg is installed
+for VisIt's movie-export workflow.
+
 - LightDM login background: `wallpaper/solidsgroup.png`
 - Desktop background: `wallpaper/cubes.png`
 - Plasma lock-screen background: `wallpaper/cubes.png`
@@ -41,8 +48,8 @@ download; the normal APT upgrade phase handles available Chrome updates.
 - Internet access
 - An account with `sudo` access
 - `curl` for the no-clone command below
-- The complete repository, including the `kde` and `wallpaper` directories,
-  for a local run
+- The complete repository, including the `kde`, `visit`, and `wallpaper`
+  directories, for a local run
 
 The script can be started from any directory because it locates its assets
 relative to its own path.
@@ -50,7 +57,7 @@ relative to its own path.
 ## Run directly from GitHub
 
 Copy and paste this one-liner. The bootstrap downloads the installer, its KDE
-settings helper, and both wallpapers; it runs the installer and removes its
+and VisIt helpers, and both wallpapers; it runs the installer and removes its
 temporary files afterward. No Git clone or checkout is required.
 
 ```bash
@@ -137,8 +144,10 @@ and Ubuntu 26.04 runners after every push and at 09:23 UTC on the first day of
 each month. APT resolves every requested operation in simulation mode against
 fresh package indexes, and the Google Chrome package URL is checked without
 installing the application. Service and firewall operations are recorded and
-verified rather than applied; generated configuration files and installed
-wallpaper assets are created and checked on the disposable runner.
+verified rather than applied; generated configuration files, installed
+wallpaper assets, and VisIt's multi-version launcher layout are created and
+checked on the disposable runner. CI checks LLNL's real release URLs without
+downloading the roughly 1.2 GB of binary archives.
 
 ## Completion and errors
 

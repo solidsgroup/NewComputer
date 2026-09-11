@@ -57,6 +57,7 @@ readonly -a MOCKED_COMMANDS=(
     "$THEME_COMMAND"
     "$QDBUS_COMMAND"
     runuser
+    sha256sum
     systemctl
     ufw
 )
@@ -168,12 +169,14 @@ assert_file_contains "Configuration completed successfully" \
     /var/log/new-computer-configure.log
 assert_file_contains "[ 62%] Install standard software and development tools" \
     /var/log/new-computer-configure.log
+assert_file_contains "[ 72%] Install LLNL VisIt 3.5 and 3.4" \
+    /var/log/new-computer-configure.log
 assert_file_contains "[ 55%] Configure the Slick Greeter login screen" \
     /var/log/new-computer-configure.log
 assert_file_contains \
     "[ 52%] Configure KDE power, lock screen, and dark theme defaults" \
     /var/log/new-computer-configure.log
-assert_file_contains "[ 75%] Ensure Google Chrome is installed" \
+assert_file_contains "[ 78%] Ensure Google Chrome is installed" \
     /var/log/new-computer-configure.log
 
 # Verify the installer requested each important external operation.
@@ -181,6 +184,7 @@ assert_trace_matches '^apt-get .* update$'
 assert_trace_matches '^apt-get .* upgrade$'
 assert_trace_matches \
     '^apt-get .* install .*kde-full.*lightdm.*slick-greeter.*breeze-gtk-theme.*breeze-icon-theme'
+assert_trace_matches '^apt-get .* install .*ffmpeg'
 assert_file_contains \
     "curl --fail --location --silent --show-error --retry 5 --retry-delay 2 https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" \
     "$COMMAND_TRACE"
@@ -209,6 +213,8 @@ assert_trace_not_matches '/etc/xdg/powermanagementprofilesrc'
 # File-producing portions run for real on the disposable hosted runner.
 assert_file_contains '"kde/set-solids-kde-settings"' \
     "$REPOSITORY_DIR/install.sh"
+assert_file_contains '"visit/install-visit-binaries"' \
+    "$REPOSITORY_DIR/install.sh"
 cmp "$REPOSITORY_DIR/wallpaper/solidsgroup.png" \
     /usr/share/backgrounds/solidsgroup.png
 cmp "$REPOSITORY_DIR/wallpaper/cubes.png" /usr/share/backgrounds/cubes.png
@@ -236,6 +242,29 @@ assert_file_contains "/usr/local/bin/set-solids-kde-settings --session" \
     /usr/local/bin/set-default-desktop-wallpaper
 bash -n /usr/local/bin/set-solids-kde-settings
 bash -n /usr/local/bin/set-default-desktop-wallpaper
+bash -n /usr/local/sbin/install-visit-binaries
+
+# Both precompiled VisIt series must be installed system-wide. The unversioned
+# command selects the newest patch, while visitX.Y requests that minor series.
+for version in 3.5.0 3.4.2; do
+    [[ -x "/opt/visit/$version/bin/internallauncher" ]]
+    [[ -x "/opt/visit/$version/linux-x86_64/bin/engine_ser" ]]
+    assert_file_contains "1;none;;linux-x86_64" \
+        "/opt/visit/$version/linux-x86_64/.installinfo"
+done
+[[ "$(readlink /opt/visit/current)" == "3.5.0" ]]
+[[ "$(readlink /usr/local/bin/visit)" == "/opt/visit/bin/visit" ]]
+[[ "$(readlink /usr/local/bin/visit3.5)" == "/opt/visit/bin/visit-version-launcher" ]]
+[[ "$(readlink /usr/local/bin/visit3.4)" == "/opt/visit/bin/visit-version-launcher" ]]
+assert_file_contains 'exec /opt/visit/bin/visit -v "$version" "$@"' \
+    /opt/visit/bin/visit-version-launcher
+assert_file_contains \
+    "https://github.com/visit-dav/visit/releases/download/v3.5.0/visit3_5_0.linux-x86_64-ubuntu24.tar.gz" \
+    "$COMMAND_TRACE"
+assert_file_contains \
+    "https://github.com/visit-dav/visit/releases/download/v3.4.2/visit3_4_2.linux-x86_64-ubuntu24.tar.gz" \
+    "$COMMAND_TRACE"
+assert_file_contains "sha256sum --check --status" "$COMMAND_TRACE"
 
 # Do not create an incomplete legacy profile before Plasma 5 has generated its
 # hardware-aware defaults, including the user's explicit power-button action.
