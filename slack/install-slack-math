@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+# The original fsavje script does not support Slack 4. Pin its successor to a
+# reviewed revision; verify both downloads before running the patcher as root.
+readonly MATH_WITH_SLACK_REVISION=c3597727bdddc2fdd4d531c14250ee554d148782
+readonly PATCH_SHA256=6d87567bd09abff8149c705f5f6a4e5d5bb10582e653b2ba8e8ca75b5e804945
+readonly MATHJAX_SHA256=638fb958b4a75a8ee586e6ae3c918f2111c5f0cefa1c61f68bc7c41e4681b4ec
+readonly DATA_DIR=/usr/local/share/math-with-slack
+readonly APP_FILE=/usr/lib/slack/resources/app.asar
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Run as root: sudo $0" >&2
+    exit 1
+fi
+if [[ ! -f "$APP_FILE" ]]; then
+    echo "Slack's .deb installation was not found at $APP_FILE." >&2
+    exit 1
+fi
+
+exec 8>/run/lock/install-slack-math.lock
+flock 8
+install -d -m755 "$DATA_DIR"
+TEMP_DIR="$(mktemp -d)"
+trap 'rm -rf -- "$TEMP_DIR"' EXIT
+
+fetch_verified() {
+    local url="$1" digest="$2" name="$3"
+    if [[ -f "$DATA_DIR/$name" ]] &&
+       printf '%s  %s\n' "$digest" "$DATA_DIR/$name" | sha256sum --check --status; then
+        return 0
+    fi
+    curl --fail --location --silent --show-error --retry 5 --retry-delay 2 \
+        "$url" --output "$TEMP_DIR/$name"
+    printf '%s  %s\n' "$digest" "$TEMP_DIR/$name" | sha256sum --check --status
+    install -m644 "$TEMP_DIR/$name" "$DATA_DIR/$name"
+}
+
+fetch_verified \
+    "https://raw.githubusercontent.com/thisiscam/math-with-slack/$MATH_WITH_SLACK_REVISION/math-with-slack.py" \
+    "$PATCH_SHA256" math-with-slack.py
+fetch_verified "https://registry.npmjs.org/mathjax/-/mathjax-3.1.0.tgz" \
+    "$MATHJAX_SHA256" mathjax-3.1.0.tgz
+
+# Import setuptools first to supply distutils on Python 3.12 and later.
+# Fetch MathJax with curl above: upstream disables Python's TLS verification.
+# An explicit archive path and closed stdin prevent interactive discovery.
+python3 -c 'import setuptools, runpy, sys; sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name="__main__")' \
+    "$DATA_DIR/math-with-slack.py" --app-file "$APP_FILE" \
+    --mathjax-url "$DATA_DIR/mathjax-3.1.0.tgz" </dev/null

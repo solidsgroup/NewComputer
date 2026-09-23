@@ -29,16 +29,22 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Check shell syntax
-        run: >-
-          bash -n install.sh new-computer-configure.sh
-          kde/set-solids-kde-settings visit/install-visit-binaries
-          tests/installer-smoke-test.sh
+        run: |
+          for script in install.sh new-computer-configure.sh \
+            kde/set-solids-kde-settings visit/install-visit-binaries \
+            slack/install-slack-math tests/installer-smoke-test.sh \
+            tests/mock-system-command; do
+            bash -n "$script"
+          done
 
       - name: Refresh package indexes and check external downloads
         run: |
           sudo apt-get update
           curl --fail --location --silent --show-error --head \
             https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+            >/dev/null
+          curl --fail --location --silent --show-error --head \
+            https://downloads.slack-edge.com/desktop-releases/linux/x64/4.52.155/slack-desktop-4.52.155-amd64.deb \
             >/dev/null
           for version_and_asset in \
             '3.5.0/visit3_5_0.linux-x86_64-ubuntu24.tar.gz' \

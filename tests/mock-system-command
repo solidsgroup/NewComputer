@@ -14,6 +14,11 @@ fi
 
 case "$command_name" in
     apt-get)
+        for argument in "$@"; do
+            if [[ "$argument" == /tmp/slack-desktop.*.deb ]]; then
+                install -Dm644 /dev/null /usr/lib/slack/resources/app.asar
+            fi
+        done
         if [[ "${CI_VALIDATE_APT:-0}" == "1" ]]; then
             for argument in "$@"; do
                 # The workflow already refreshed the real indexes. Repository
@@ -22,10 +27,10 @@ case "$command_name" in
                     exit 0
                 fi
 
-                # curl creates an empty stand-in for Chrome's large .deb. The
+                # curl creates empty stand-ins for the desktop .deb files. The
                 # workflow checks the real download URL separately, so record
                 # this install without asking APT to parse the placeholder.
-                if [[ "$argument" == /tmp/google-chrome-stable.*.deb ]]; then
+                if [[ "$argument" == /tmp/google-chrome-stable.*.deb || "$argument" == /tmp/slack-desktop.*.deb ]]; then
                     exit 0
                 fi
             done
@@ -92,7 +97,11 @@ case "$command_name" in
     dpkg-deb)
         case "${3:-}" in
             Package)
-                printf '%s\n' google-chrome-stable
+                if [[ "$2" == /tmp/slack-desktop.*.deb ]]; then
+                    printf '%s\n' slack-desktop
+                else
+                    printf '%s\n' google-chrome-stable
+                fi
                 ;;
             Version)
                 printf '%s\n' 1.2.3-test
@@ -106,7 +115,8 @@ case "$command_name" in
         esac
         ;;
     dpkg-query)
-        if [[ "${CI_GOOGLE_CHROME_INSTALLED:-0}" == "1" ]]; then
+        if [[ "${!#}" == google-chrome-stable && "${CI_GOOGLE_CHROME_INSTALLED:-0}" == "1" ]] ||
+           [[ "${!#}" == slack-desktop && "${CI_SLACK_INSTALLED:-0}" == "1" ]]; then
             printf '%s\n' installed
             exit 0
         fi

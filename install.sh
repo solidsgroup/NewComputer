@@ -9,6 +9,7 @@ readonly -a INSTALLER_FILES=(
     "new-computer-configure.sh"
     "kde/set-solids-kde-settings"
     "visit/install-visit-binaries"
+    "slack/install-slack-math"
     "wallpaper/solidsgroup.png"
     "wallpaper/cubes.png"
 )
@@ -56,6 +57,7 @@ trap cleanup EXIT
 mkdir -p \
     "$INSTALLER_TEMP_DIR/kde" \
     "$INSTALLER_TEMP_DIR/visit" \
+    "$INSTALLER_TEMP_DIR/slack" \
     "$INSTALLER_TEMP_DIR/wallpaper"
 for relative_path in "${INSTALLER_FILES[@]}"; do
     curl \

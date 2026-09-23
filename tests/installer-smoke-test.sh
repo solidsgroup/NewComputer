@@ -52,6 +52,7 @@ readonly -a MOCKED_COMMANDS=(
     dpkg-deb
     dpkg-query
     dpkg-reconfigure
+    python3
     ln
     "$KWRITE_CONFIG_COMMAND"
     "$THEME_COMMAND"
@@ -145,13 +146,14 @@ assert_file_contains "[  5%] ■ Cancelled: Refresh Ubuntu package metadata" \
 assert_file_contains "Configuration cancelled by SIGINT" "$INTERRUPT_UI_OUTPUT"
 assert_file_not_contains "[100%] ✓ Configuration complete" "$INTERRUPT_UI_OUTPUT"
 
-# A repeat installation must not download the large Chrome package again.
+# A repeat installation skips desktop package downloads and reapplies math.
 : >"$CHROME_SKIP_TRACE"
 sudo env \
     "PATH=$MOCK_BIN_DIR:$PATH" \
     "CI_COMMAND_TRACE=$CHROME_SKIP_TRACE" \
     "CI_VALIDATE_APT=0" \
     "CI_GOOGLE_CHROME_INSTALLED=1" \
+    "CI_SLACK_INSTALLED=1" \
     bash "$REPOSITORY_DIR/new-computer-configure.sh" \
     >"$CHROME_SKIP_UI_OUTPUT" 2>&1
 assert_file_contains "dpkg-query" "$CHROME_SKIP_TRACE"
@@ -185,6 +187,14 @@ assert_trace_matches '^apt-get .* upgrade$'
 assert_trace_matches \
     '^apt-get .* install .*kde-full.*lightdm.*slick-greeter.*breeze-gtk-theme.*breeze-icon-theme'
 assert_trace_matches '^apt-get .* install .*ffmpeg'
+assert_trace_matches '^apt-get .* install .*python3-setuptools.*nodejs.*npm'
+assert_trace_matches '^apt-get .* install /tmp/slack-desktop\..*\.deb$'
+assert_trace_matches '^python3 .*--app-file /usr/lib/slack/resources/app.asar.*--mathjax-url'
+assert_file_contains 'slack/install-slack-math' "$REPOSITORY_DIR/install.sh"
+assert_file_contains '[ 80%] ● Install Slack desktop and math rendering' "$UI_OUTPUT"
+assert_file_not_contains '/tmp/slack-desktop.' "$CHROME_SKIP_TRACE"
+assert_file_contains '--app-file /usr/lib/slack/resources/app.asar' "$CHROME_SKIP_TRACE"
+bash -n /usr/local/sbin/install-slack-math
 assert_file_contains \
     "curl --fail --location --silent --show-error --retry 5 --retry-delay 2 https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" \
     "$COMMAND_TRACE"

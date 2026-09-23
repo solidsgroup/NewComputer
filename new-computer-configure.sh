@@ -12,8 +12,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOGIN_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/solidsgroup.png"
 DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
 KDE_SETTINGS_SOURCE="$SCRIPT_DIR/kde/set-solids-kde-settings"
+SLACK_MATH_INSTALLER_SOURCE="$SCRIPT_DIR/slack/install-slack-math"
 VISIT_INSTALLER_SOURCE="$SCRIPT_DIR/visit/install-visit-binaries"
 GOOGLE_CHROME_DEB_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+SLACK_DEB_URL="https://downloads.slack-edge.com/desktop-releases/linux/x64/4.52.155/slack-desktop-4.52.155-amd64.deb"
 LOG_FILE="/var/log/new-computer-configure.log"
 FAILED_LINE="unknown"
 PROGRESS_PERCENT=0
@@ -39,6 +41,7 @@ readonly -a UI_STEPS=(
     "Install standard software and development tools"
     "Install LLNL VisIt 3.5 and 3.4"
     "Ensure Google Chrome is installed"
+    "Install Slack desktop and math rendering"
     "Install the Clang toolchain"
     "Configure remote SSH access"
     "Remove unneeded packages"
@@ -53,7 +56,8 @@ for required_file in \
     "$LOGIN_WALLPAPER_SOURCE" \
     "$DESKTOP_WALLPAPER_SOURCE" \
     "$KDE_SETTINGS_SOURCE" \
-    "$VISIT_INSTALLER_SOURCE"; do
+    "$VISIT_INSTALLER_SOURCE" \
+    "$SLACK_MATH_INSTALLER_SOURCE"; do
     if [[ ! -r "$required_file" ]]; then
         echo "Required file not found: $required_file"
         exit 1
@@ -632,6 +636,9 @@ show_progress 62 "Install standard software and development tools"
     openssh-server \
     meld \
     python3-pip \
+    python3-setuptools \
+    nodejs \
+    npm \
     texlive-latex-extra \
     texlive-fonts-extra \
     texlive-latex-base \
@@ -700,6 +707,63 @@ install_google_chrome() {
 
 show_progress 78 "Ensure Google Chrome is installed"
 install_google_chrome
+
+install_slack_desktop() {
+    local slack_deb
+    local package_architecture=""
+    local package_name=""
+    local package_version=""
+    local status=0
+
+    if dpkg-query -W -f='${db:Status-Status}\n' slack-desktop \
+        2>/dev/null | grep -Fxq installed; then
+        echo "Slack is already installed; skipping the package download."
+        return 0
+    fi
+
+    if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+        echo "Slack is only available for amd64 systems." >&2
+        return 1
+    fi
+
+    slack_deb="$(mktemp --tmpdir=/tmp --suffix=.deb slack-desktop.XXXXXX)"
+    curl \
+        --fail \
+        --location \
+        --silent \
+        --show-error \
+        --retry 5 \
+        --retry-delay 2 \
+        "$SLACK_DEB_URL" \
+        --output "$slack_deb" || status=$?
+
+    if (( status == 0 )); then
+        package_name="$(dpkg-deb --field "$slack_deb" Package)" || status=$?
+        package_version="$(dpkg-deb --field "$slack_deb" Version)" || status=$?
+        package_architecture="$(dpkg-deb --field "$slack_deb" Architecture)" || status=$?
+    fi
+
+    if (( status == 0 )) && \
+       { [[ "$package_name" != "slack-desktop" ]] || \
+         [[ "$package_architecture" != "amd64" ]]; }; then
+        echo "Unexpected package downloaded from Slack URL: " \
+             "$package_name $package_architecture" >&2
+        status=1
+    fi
+
+    if (( status == 0 )); then
+        echo "Installing Slack $package_version."
+        "${APT_GET[@]}" install "$slack_deb" || status=$?
+    fi
+
+    rm -f -- "$slack_deb"
+    return "$status"
+}
+
+show_progress 80 "Install Slack desktop and math rendering"
+install_slack_desktop
+install -Dm755 "$SLACK_MATH_INSTALLER_SOURCE" /usr/local/sbin/install-slack-math
+/usr/local/sbin/install-slack-math
 
 # add everything needed to run with clang
 show_progress 82 "Install the Clang toolchain"
