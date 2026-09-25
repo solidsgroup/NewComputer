@@ -624,6 +624,7 @@ show_progress 62 "Install standard software and development tools"
 "${APT_GET[@]}" install \
     emacs \
     evince \
+    inkscape \
     ffmpeg \
     mpich \
     python-is-python3 \
@@ -646,6 +647,7 @@ show_progress 62 "Install standard software and development tools"
     texlive-latex-base \
     texlive-publishers \
     texlive-science \
+    latexmk \
     ufw
 
 # Install LLNL's official release binary distributions directly. This avoids
