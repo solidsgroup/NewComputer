@@ -8,6 +8,7 @@ readonly COMMIT_FEED_URL="https://github.com/$REPOSITORY/commits/$BRANCH.atom"
 readonly -a INSTALLER_FILES=(
     "new-computer-configure.sh"
     "kde/set-solids-kde-settings"
+    "kde/inkscape-with-local-menu"
     "visit/install-visit-binaries"
     "slack/install-slack-math"
     "wallpaper/solidsgroup.png"

@@ -15,6 +15,19 @@ fi
 case "$command_name" in
     apt-get)
         for argument in "$@"; do
+            if [[ "$argument" == inkscape ]]; then
+                install -d /usr/share/applications
+                cat > /usr/share/applications/org.inkscape.Inkscape.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Inkscape
+Exec=inkscape %F
+Actions=new-window;
+[Desktop Action new-window]
+Name=New Window
+Exec=inkscape
+EOF
+            fi
             if [[ "$argument" == /tmp/slack-desktop.*.deb ]]; then
                 install -Dm644 /dev/null /usr/lib/slack/resources/app.asar
             fi

@@ -32,10 +32,14 @@ jobs:
         run: |
           for script in install.sh new-computer-configure.sh \
             kde/set-solids-kde-settings visit/install-visit-binaries \
+            kde/inkscape-with-local-menu tests/inkscape-launcher-test.sh \
             slack/install-slack-math tests/installer-smoke-test.sh \
             tests/mock-system-command; do
             bash -n "$script"
           done
+
+      - name: Check Inkscape menu launcher
+        run: bash tests/inkscape-launcher-test.sh
 
       - name: Refresh package indexes and check external downloads
         run: |

@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOGIN_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/solidsgroup.png"
 DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
 KDE_SETTINGS_SOURCE="$SCRIPT_DIR/kde/set-solids-kde-settings"
+INKSCAPE_LAUNCHER_SOURCE="$SCRIPT_DIR/kde/inkscape-with-local-menu"
 SLACK_MATH_INSTALLER_SOURCE="$SCRIPT_DIR/slack/install-slack-math"
 VISIT_INSTALLER_SOURCE="$SCRIPT_DIR/visit/install-visit-binaries"
 GOOGLE_CHROME_DEB_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
@@ -56,6 +57,7 @@ for required_file in \
     "$LOGIN_WALLPAPER_SOURCE" \
     "$DESKTOP_WALLPAPER_SOURCE" \
     "$KDE_SETTINGS_SOURCE" \
+    "$INKSCAPE_LAUNCHER_SOURCE" \
     "$VISIT_INSTALLER_SOURCE" \
     "$SLACK_MATH_INSTALLER_SOURCE"; do
     if [[ ! -r "$required_file" ]]; then
@@ -649,6 +651,17 @@ show_progress 62 "Install standard software and development tools"
     texlive-science \
     latexmk \
     ufw
+
+# Use the tested local-menu workaround on Ubuntu 26.04. Copy the packaged
+# desktop entry so file associations, translations, and actions are retained.
+# Both normal launch and the New Window action must use the wrapper.
+if [[ "$VERSION_ID" == 26.04 ]]; then
+    install -Dm755 "$INKSCAPE_LAUNCHER_SOURCE" /usr/local/bin/inkscape
+    install -d -m755 /usr/local/share/applications
+    sed -E 's@^Exec=inkscape([[:space:]]|$)@Exec=/usr/local/bin/inkscape\1@' \
+        /usr/share/applications/org.inkscape.Inkscape.desktop \
+        > /usr/local/share/applications/org.inkscape.Inkscape.desktop
+fi
 
 # Install LLNL's official release binary distributions directly. This avoids
 # the interactive visit-install script while retaining side-by-side versions.

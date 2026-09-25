@@ -8,6 +8,13 @@ Slick Greeter as the login manager, installs the standard software used by the
 group—including Google Chrome, Slack desktop, Node.js, and npm—and configures
 the supplied wallpapers.
 
+On Ubuntu 26.04, Inkscape uses a launcher that disables global-menu forwarding
+in KDE and selects X11/XWayland in KDE Wayland sessions. This keeps its menu
+inside the application window and avoids the disappearing-menu issue. The
+terminal command, application launcher, and New Window action use this helper;
+other desktop sessions retain their normal backend. Restart Inkscape after
+running the installer to apply the change.
+
 LLNL VisIt is installed from its official precompiled Ubuntu 24 binary
 distributions. The maintained 3.5 and 3.4 series are installed side by side:
 `visit` and `visit3.5` launch VisIt 3.5.0, while `visit3.4` launches VisIt

@@ -195,6 +195,17 @@ assert_file_contains '[ 80%] ● Install Slack desktop and math rendering' "$UI_
 assert_file_not_contains '/tmp/slack-desktop.' "$CHROME_SKIP_TRACE"
 assert_file_contains '--app-file /usr/lib/slack/resources/app.asar' "$CHROME_SKIP_TRACE"
 bash -n /usr/local/sbin/install-slack-math
+assert_file_contains 'kde/inkscape-with-local-menu' "$REPOSITORY_DIR/install.sh"
+if [[ "$EXPECTED_UBUNTU_VERSION" == 26.04 ]]; then
+    cmp "$REPOSITORY_DIR/kde/inkscape-with-local-menu" /usr/local/bin/inkscape
+    assert_file_contains 'Exec=/usr/local/bin/inkscape %F' \
+        /usr/local/share/applications/org.inkscape.Inkscape.desktop
+    grep -Fxq 'Exec=/usr/local/bin/inkscape' \
+        /usr/local/share/applications/org.inkscape.Inkscape.desktop
+else
+    [[ ! -e /usr/local/bin/inkscape ]]
+    [[ ! -e /usr/local/share/applications/org.inkscape.Inkscape.desktop ]]
+fi
 assert_file_contains \
     "curl --fail --location --silent --show-error --retry 5 --retry-delay 2 https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" \
     "$COMMAND_TRACE"

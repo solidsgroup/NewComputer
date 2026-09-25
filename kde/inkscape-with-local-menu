@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+# Inkscape's GTK menu can disappear after its window opens in Plasma/Wayland.
+# Keep it in the application window; other desktop sessions retain defaults.
+case ":${XDG_CURRENT_DESKTOP:-}:" in
+    *:KDE:*)
+        export UBUNTU_MENUPROXY=0
+        if [[ "${XDG_SESSION_TYPE:-}" == wayland ]]; then
+            export GDK_BACKEND=x11
+        fi
+        ;;
+esac
+
+exec /usr/bin/inkscape "$@"
