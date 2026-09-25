@@ -623,6 +623,7 @@ EOF
 show_progress 62 "Install standard software and development tools"
 "${APT_GET[@]}" install \
     emacs \
+    evince \
     ffmpeg \
     mpich \
     python-is-python3 \
