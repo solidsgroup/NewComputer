@@ -641,6 +641,7 @@ show_progress 62 "Install standard software and development tools"
     nodejs \
     npm \
     texlive-latex-extra \
+    texlive-bibtex-extra \
     texlive-fonts-extra \
     texlive-latex-base \
     texlive-publishers \
