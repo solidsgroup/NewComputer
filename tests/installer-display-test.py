@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import pty
 import select
+import shlex
 import struct
 import subprocess
 import sys
@@ -118,7 +119,13 @@ esac
                 def terminal_session():
                     os.setsid()
                     fcntl.ioctl(0, termios.TIOCSCTTY, 0)
-                process = subprocess.Popen(['bash' , str(harness), str(ROOT), str(path), mode], stdin=slave, stdout=slave, stderr=slave, preexec_fn=terminal_session,
+                command = ['bash', str(harness), str(ROOT), str(path), mode]
+                if os.environ.get('TEST_SUDO_PIPELINE') == '1':
+                    bootstrap = (ROOT / 'install.sh').read_text()
+                    handoff = bootstrap[bootstrap.index('# sudo may initially'):bootstrap.index('bash "$INSTALLER_TEMP_DIR/new-computer-configure.sh"')]
+                    payload = handoff + shlex.join(command) + '\n'
+                    command = ['bash', '-c', "printf '%s' " + shlex.quote(payload) + ' | sudo -n bash']
+                process = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave, preexec_fn=terminal_session,
                                            env={**os.environ, 'TERM': 'xterm-256color', 'NO_COLOR': '1'})
                 output = bytearray()
                 deadline = time.monotonic() + 8

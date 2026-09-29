@@ -80,4 +80,14 @@ for relative_path in "${INSTALLER_FILES[@]}"; do
         --output "$INSTALLER_TEMP_DIR/$relative_path"
 done
 
+# sudo may initially put a piped command in the background of its own PTY.
+# Claim that terminal in sudo's immediate child before launching the installer:
+# if a grandchild triggers job control first, bash can wait forever for it.
+if [[ -t 1 ]]; then
+    read -r bootstrap_pgid terminal_pgid < <(ps -o pgid=,tpgid= -p "$$")
+    if (( terminal_pgid > 0 && bootstrap_pgid != terminal_pgid )); then
+        kill -s TTIN "$$"
+    fi
+fi
+
 bash "$INSTALLER_TEMP_DIR/new-computer-configure.sh"

@@ -41,6 +41,9 @@ jobs:
       - name: Check live terminal display
         run: python3 tests/installer-display-test.py
 
+      - name: Check piped sudo terminal handoff
+        run: sudo env TEST_SUDO_PIPELINE=1 python3 tests/installer-display-test.py
+
       - name: Check Inkscape menu launcher
         run: bash tests/inkscape-launcher-test.sh
 
