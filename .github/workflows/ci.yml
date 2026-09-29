@@ -41,6 +41,9 @@ jobs:
       - name: Check Inkscape menu launcher
         run: bash tests/inkscape-launcher-test.sh
 
+      - name: Check ISU VPN configuration and authentication handoff
+        run: python3 tests/isu-vpn-test.py
+
       - name: Check TexText warning compatibility
         run: python3 tests/textext-warning-test.py
 

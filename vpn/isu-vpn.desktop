@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ISU VPN
+Comment=Connect to Iowa State through browser sign-in
+Exec=/usr/local/bin/isu-vpn
+Icon=network-vpn
+Terminal=true
+Categories=Network;

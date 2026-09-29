@@ -187,6 +187,9 @@ assert_trace_matches '^apt-get .* upgrade$'
 assert_trace_matches \
     '^apt-get .* install .*kde-full.*lightdm.*slick-greeter.*breeze-gtk-theme.*breeze-icon-theme'
 assert_trace_matches '^apt-get .* install .*ffmpeg'
+assert_file_contains 'python3 /usr/local/bin/isu-vpn --configure' "$COMMAND_TRACE"
+cmp "$REPOSITORY_DIR/vpn/isu-vpn" /usr/local/bin/isu-vpn
+cmp "$REPOSITORY_DIR/vpn/isu-vpn.desktop" /usr/local/share/applications/isu-vpn.desktop
 assert_trace_matches '^apt-get .* install .*openconnect.*network-manager-openconnect.*network-manager-openconnect-gnome'
 assert_trace_matches '^apt-get .* install .*python3-setuptools.*nodejs.*npm'
 assert_trace_matches '^apt-get .* install /tmp/slack-desktop\..*\.deb$'

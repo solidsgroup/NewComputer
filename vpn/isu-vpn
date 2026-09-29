@@ -1,0 +1,130 @@
+#!/usr/bin/python3
+"""ISU browser authentication with an OpenConnect NetworkManager connection."""
+import argparse
+import os
+import shlex
+import subprocess
+import sys
+
+PROFILE = "ISU"
+SERVICE = "org.freedesktop.NetworkManager.openconnect"
+# ISU KB0011105: vpn.iastate.edu, Primary, Sign On Dashboard, split routing.
+# Generic AnyConnect UA is needed for the gateway's XML/SAML login endpoint.
+VPN_DATA = (
+    "gateway=vpn.iastate.edu,protocol=anyconnect,useragent=AnyConnect,"
+    "prevent_invalid_cert=yes,enable_csd_trojan=no,"
+    "cookie-flags=2,gateway-flags=2,gwcert-flags=2,resolve-flags=2"
+)
+
+
+def run(*args, **kwargs):
+    return subprocess.run(args, check=True, text=True, **kwargs)
+
+
+def profile_uuid():
+    listing = run("nmcli", "-t", "-f", "UUID,NAME", "connection", "show",
+                  capture_output=True).stdout
+    matches = [line.split(":", 1)[0] for line in listing.splitlines()
+               if line.partition(":")[2] == PROFILE]
+    if len(matches) > 1:
+        raise ValueError("Multiple ISU connections exist; rename duplicates first.")
+    if not matches:
+        return None
+    uuid = matches[0]
+    service = run("nmcli", "-g", "vpn.service-type", "connection", "show",
+                  "uuid", uuid, capture_output=True).stdout.strip()
+    if service != SERVICE:
+        raise ValueError("Existing ISU connection is not OpenConnect; rename it first.")
+    return uuid
+
+
+def configure():
+    uuid = profile_uuid()
+    settings = ["connection.autoconnect", "no", "vpn.data", VPN_DATA,
+                "vpn.secrets", "", "ipv4.never-default", "yes",
+                "ipv6.never-default", "yes", "ipv4.ignore-auto-routes", "no",
+                "ipv6.ignore-auto-routes", "no", "ipv4.ignore-auto-dns", "no",
+                "ipv6.ignore-auto-dns", "no"]
+    if uuid:
+        run("nmcli", "connection", "modify", "uuid", uuid, *settings)
+    else:
+        run("nmcli", "connection", "add", "type", "vpn", "vpn-type", "openconnect",
+            "con-name", PROFILE, *settings)
+    print("ISU VPN configured. Run isu-vpn as your desktop user to sign in.")
+
+
+def parse_auth(output):
+    # Parse OpenConnect's shell assignments as data; never evaluate shell code.
+    values = {}
+    allowed = {"COOKIE", "HOST", "CONNECT_URL", "FINGERPRINT", "RESOLVE"}
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        words = shlex.split(line)
+        if len(words) != 1 or "=" not in words[0]:
+            raise ValueError("Unexpected OpenConnect authentication response.")
+        key, value = words[0].split("=", 1)
+        if key not in allowed or key in values or any(c in value for c in "\r\n\0"):
+            raise ValueError("Invalid OpenConnect authentication response.")
+        values[key] = value
+    if not all(values.get(k) for k in ("COOKIE", "CONNECT_URL", "FINGERPRINT")):
+        raise ValueError("OpenConnect did not return a complete login session.")
+    if not values["CONNECT_URL"].startswith("https://"):
+        raise ValueError("OpenConnect returned a non-HTTPS gateway.")
+    return values
+
+
+def connect():
+    if os.geteuid() == 0:
+        raise ValueError("Run isu-vpn without sudo so your browser opens as your user.")
+    uuid = profile_uuid()
+    if not uuid:
+        raise ValueError("ISU profile missing. Run sudo isu-vpn --configure first.")
+    print("Sign in through ISU's browser page and complete MFA.", flush=True)
+    result = run("openconnect", "--authenticate", "--protocol=anyconnect",
+                 "--authgroup=Primary", "--useragent=AnyConnect",
+                 "--external-browser=/usr/bin/xdg-open", "https://vpn.iastate.edu",
+                 stdout=subprocess.PIPE)
+    values = parse_auth(result.stdout)
+    fields = {"cookie": "COOKIE", "gateway": "CONNECT_URL", "gwcert": "FINGERPRINT",
+              "resolve": "RESOLVE"}
+    secrets = "".join(f"vpn.secrets.{key}:{values[value]}\n"
+                      for key, value in fields.items() if values.get(value))
+    # Anonymous memory file: tokens never enter argv or a persistent disk file.
+    fd = os.memfd_create("isu-vpn-session", os.MFD_CLOEXEC)
+    try:
+        os.write(fd, secrets.encode())
+        os.lseek(fd, 0, os.SEEK_SET)
+        run("nmcli", "connection", "up", "uuid", uuid,
+            "passwd-file", f"/proc/self/fd/{fd}", pass_fds=(fd,))
+    finally:
+        os.close(fd)
+    print("Connected. Disconnect using the network panel or: nmcli connection down ISU")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--configure", action="store_true",
+                        help="create/update the system profile (requires root)")
+    args = parser.parse_args()
+    try:
+        if args.configure:
+            if os.geteuid() != 0:
+                raise ValueError("Run sudo isu-vpn --configure to install the profile.")
+            configure()
+        else:
+            connect()
+    except (ValueError, OSError) as exc:
+        print(f"ISU VPN: {exc}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        # Do not print captured authentication output or a session token.
+        print(f"ISU VPN: {exc.cmd[0]} failed (status {exc.returncode}).", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

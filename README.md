@@ -16,14 +16,30 @@ On Ubuntu 26.04, the installer filters TexText's known `GLib.unix_signal_add_ful
 deprecation warning before GTK loads, preserving other warnings and errors.
 Rerun the installer if a TexText package update replaces the patched file.
 
-VPN support uses OpenConnect and its NetworkManager integration on both Ubuntu
-releases. Cisco Secure Client is not required. To configure the ISU VPN in
-NetworkManager, add a Cisco AnyConnect/OpenConnect connection with gateway
-`vpn.iastate.edu` and user agent `AnyConnect Linux_64 4.7.00136`. Select the
-`Secondary` group when connecting, then complete the ISU/Okta login and MFA.
-See the [group's ISU VPN instructions](https://www.solids.group/isu-vpn-on-ubuntu-24-04/).
-The installer installs the clients; it does not store credentials or connect
-automatically. If an incompatible Cisco package is already partially installed,
+The installer configures an `ISU` OpenConnect VPN connection on both Ubuntu
+releases, using the server `vpn.iastate.edu` and **Primary** group from
+[ISU's official VPN instructions (KB0011105)](https://iastate.service-now.com/it?id=kb_article&sysparm_article=KB0011105).
+Open **ISU VPN** in the application menu, or run `isu-vpn` in a terminal without
+sudo. Complete the Sign On Dashboard login and MFA in your browser. The launcher
+then activates the connection through NetworkManager; disconnect using the
+network panel or `nmcli connection down ISU`.
+
+ISU documents Cisco Secure Client; this installer adapts those settings for
+OpenConnect. The generic `AnyConnect` user agent enables the gateway's browser
+login flow, as verified against the live gateway. The launcher explicitly selects
+Primary and avoids desktop-specific embedded-browser limitations. Login tokens
+are handed to NetworkManager in memory, never put in command arguments or saved
+to disk by the launcher. The installer never signs in or connects automatically.
+Server-provided routes and DNS are accepted, with default routes disabled so
+non-ISU traffic keeps using the usual connection, as described by ISU.
+
+Rerunning setup updates the existing `ISU` OpenConnect profile without changing
+its UUID or other connections. It clears old authentication settings and cached
+profile secrets. To configure just the VPN again: `sudo isu-vpn --configure`.
+An authenticated session is required to verify campus access and DNS; CI checks
+configuration and token handoff without university credentials.
+
+If an incompatible Cisco package is already partially installed,
 repair APT before running the installer:
 
 ```bash

@@ -13,6 +13,8 @@ LOGIN_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/solidsgroup.png"
 DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
 KDE_SETTINGS_SOURCE="$SCRIPT_DIR/kde/set-solids-kde-settings"
 INKSCAPE_LAUNCHER_SOURCE="$SCRIPT_DIR/kde/inkscape-with-local-menu"
+ISU_VPN_SOURCE="$SCRIPT_DIR/vpn/isu-vpn"
+ISU_VPN_DESKTOP_SOURCE="$SCRIPT_DIR/vpn/isu-vpn.desktop"
 TEXTEXT_PATCH_SOURCE="$SCRIPT_DIR/inkscape/patch-textext-warning.py"
 SLACK_MATH_INSTALLER_SOURCE="$SCRIPT_DIR/slack/install-slack-math"
 VISIT_INSTALLER_SOURCE="$SCRIPT_DIR/visit/install-visit-binaries"
@@ -59,6 +61,8 @@ for required_file in \
     "$DESKTOP_WALLPAPER_SOURCE" \
     "$KDE_SETTINGS_SOURCE" \
     "$INKSCAPE_LAUNCHER_SOURCE" \
+    "$ISU_VPN_SOURCE" \
+    "$ISU_VPN_DESKTOP_SOURCE" \
     "$TEXTEXT_PATCH_SOURCE" \
     "$VISIT_INSTALLER_SOURCE" \
     "$SLACK_MATH_INSTALLER_SOURCE"; do
@@ -657,6 +661,11 @@ show_progress 62 "Install standard software and development tools"
     texlive-science \
     latexmk \
     ufw
+
+# Configure the official ISU gateway; authentication remains interactive.
+install -Dm755 "$ISU_VPN_SOURCE" /usr/local/bin/isu-vpn
+install -Dm644 "$ISU_VPN_DESKTOP_SOURCE" /usr/local/share/applications/isu-vpn.desktop
+python3 /usr/local/bin/isu-vpn --configure
 
 # Avoid Inkscape's misleading additional-data dialog on newer PyGObject.
 if [[ "$VERSION_ID" == 26.04 ]]; then
