@@ -13,6 +13,7 @@ LOGIN_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/solidsgroup.png"
 DESKTOP_WALLPAPER_SOURCE="$SCRIPT_DIR/wallpaper/cubes.png"
 KDE_SETTINGS_SOURCE="$SCRIPT_DIR/kde/set-solids-kde-settings"
 INKSCAPE_LAUNCHER_SOURCE="$SCRIPT_DIR/kde/inkscape-with-local-menu"
+TEXTEXT_PATCH_SOURCE="$SCRIPT_DIR/inkscape/patch-textext-warning.py"
 SLACK_MATH_INSTALLER_SOURCE="$SCRIPT_DIR/slack/install-slack-math"
 VISIT_INSTALLER_SOURCE="$SCRIPT_DIR/visit/install-visit-binaries"
 GOOGLE_CHROME_DEB_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
@@ -58,6 +59,7 @@ for required_file in \
     "$DESKTOP_WALLPAPER_SOURCE" \
     "$KDE_SETTINGS_SOURCE" \
     "$INKSCAPE_LAUNCHER_SOURCE" \
+    "$TEXTEXT_PATCH_SOURCE" \
     "$VISIT_INSTALLER_SOURCE" \
     "$SLACK_MATH_INSTALLER_SOURCE"; do
     if [[ ! -r "$required_file" ]]; then
@@ -639,6 +641,9 @@ show_progress 62 "Install standard software and development tools"
     libtclap-dev \
     libmuparser-dev \
     openssh-server \
+    openconnect \
+    network-manager-openconnect \
+    network-manager-openconnect-gnome \
     meld \
     python3-pip \
     python3-setuptools \
@@ -652,6 +657,11 @@ show_progress 62 "Install standard software and development tools"
     texlive-science \
     latexmk \
     ufw
+
+# Avoid Inkscape's misleading additional-data dialog on newer PyGObject.
+if [[ "$VERSION_ID" == 26.04 ]]; then
+    python3 "$TEXTEXT_PATCH_SOURCE" /usr/share/inkscape/extensions/textext/asktext.py
+fi
 
 # Use the tested local-menu workaround on Ubuntu 26.04. Copy the packaged
 # desktop entry so file associations, translations, and actions are retained.

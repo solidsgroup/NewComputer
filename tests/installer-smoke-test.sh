@@ -187,6 +187,7 @@ assert_trace_matches '^apt-get .* upgrade$'
 assert_trace_matches \
     '^apt-get .* install .*kde-full.*lightdm.*slick-greeter.*breeze-gtk-theme.*breeze-icon-theme'
 assert_trace_matches '^apt-get .* install .*ffmpeg'
+assert_trace_matches '^apt-get .* install .*openconnect.*network-manager-openconnect.*network-manager-openconnect-gnome'
 assert_trace_matches '^apt-get .* install .*python3-setuptools.*nodejs.*npm'
 assert_trace_matches '^apt-get .* install /tmp/slack-desktop\..*\.deb$'
 assert_trace_matches '^python3 .*--app-file /usr/lib/slack/resources/app.asar.*--mathjax-url'
@@ -197,6 +198,7 @@ assert_file_contains '--app-file /usr/lib/slack/resources/app.asar' "$CHROME_SKI
 bash -n /usr/local/sbin/install-slack-math
 assert_file_contains 'kde/inkscape-with-local-menu' "$REPOSITORY_DIR/install.sh"
 if [[ "$EXPECTED_UBUNTU_VERSION" == 26.04 ]]; then
+    assert_file_contains "inkscape/patch-textext-warning.py /usr/share/inkscape/extensions/textext/asktext.py" "$COMMAND_TRACE"
     cmp "$REPOSITORY_DIR/kde/inkscape-with-local-menu" /usr/local/bin/inkscape
     assert_file_contains 'Exec=/usr/local/bin/inkscape %F' \
         /usr/local/share/applications/org.inkscape.Inkscape.desktop

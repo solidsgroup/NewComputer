@@ -41,6 +41,9 @@ jobs:
       - name: Check Inkscape menu launcher
         run: bash tests/inkscape-launcher-test.sh
 
+      - name: Check TexText warning compatibility
+        run: python3 tests/textext-warning-test.py
+
       - name: Refresh package indexes and check external downloads
         run: |
           sudo apt-get update

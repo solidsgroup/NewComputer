@@ -10,8 +10,27 @@ the supplied wallpapers.
 
 Inkscape includes the TexText extension through Ubuntu's `inkscape-textext`
 package, along with its dependencies and the installer's TeX Live packages.
-After installation, restart Inkscape and open **Extensions → TexText** to
+After installation, restart Inkscape and open **Extensions → Text → TexText** to
 insert and re-edit LaTeX graphics.
+On Ubuntu 26.04, the installer filters TexText's known `GLib.unix_signal_add_full`
+deprecation warning before GTK loads, preserving other warnings and errors.
+Rerun the installer if a TexText package update replaces the patched file.
+
+VPN support uses OpenConnect and its NetworkManager integration on both Ubuntu
+releases. Cisco Secure Client is not required. To configure the ISU VPN in
+NetworkManager, add a Cisco AnyConnect/OpenConnect connection with gateway
+`vpn.iastate.edu` and user agent `AnyConnect Linux_64 4.7.00136`. Select the
+`Secondary` group when connecting, then complete the ISU/Okta login and MFA.
+See the [group's ISU VPN instructions](https://www.solids.group/isu-vpn-on-ubuntu-24-04/).
+The installer installs the clients; it does not store credentials or connect
+automatically. If an incompatible Cisco package is already partially installed,
+repair APT before running the installer:
+
+```bash
+sudo apt-get install openconnect network-manager-openconnect network-manager-openconnect-gnome cisco-secure-client-vpn-
+```
+
+The trailing `-` requests removal of the old Cisco VPN package.
 
 On Ubuntu 26.04, Inkscape uses a launcher that disables global-menu forwarding
 in KDE and selects X11/XWayland in KDE Wayland sessions. This keeps its menu
@@ -83,7 +102,7 @@ Future Slack releases may require an updated patcher.
 - Internet access
 - An account with `sudo` access
 - `curl` for the no-clone command below
-- The complete repository, including the `kde`, `visit`, `slack`, and `wallpaper`
+- The complete repository, including the `kde`, `inkscape`, `visit`, `slack`, and `wallpaper`
   directories, for a local run
 
 The script can be started from any directory because it locates its assets
