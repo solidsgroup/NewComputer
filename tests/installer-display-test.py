@@ -13,6 +13,7 @@ import tempfile
 import termios
 import time
 import unittest
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,29 @@ class DisplayTests(unittest.TestCase):
             if width >= 45:
                 self.assertIn('● Install and configure ISU VPN', frame)
         self.assertEqual(display.plain('\x1b[31mred\x1b[0m'), 'red')
+
+    def test_toggle_layout_and_active_highlight(self):
+        active = '  ●  Install and configure ISU VPN'
+        checklist = ['Title', 'Subtitle', 'Rule', 'Progress', active, 'Status', 'Log']
+        with patch.dict(os.environ, {'NO_COLOR': ''}):
+            first = display.styled(active, 60, phase=0)
+            second = display.styled(active, 60, phase=1)
+            self.assertNotEqual(first, second)
+            self.assertEqual(display.plain(first), display.plain(second))
+            self.assertIn(';48;2;', second)
+            for line in ['  ✓  Finished', '  ○  Pending', '  ×  Failed', '  ● Working']:
+                self.assertEqual(display.styled(line, 60, phase=0),
+                                 display.styled(line, 60, phase=1))
+        with patch.dict(os.environ, {'NO_COLOR': '1'}):
+            self.assertEqual(display.styled(active, 60, phase=0),
+                             display.styled(active, 60, phase=1))
+        for width in [80, 132]:
+            hidden = display.frame(checklist, ['log-only marker'], width, 24, show_log=False)
+            shown = display.frame(checklist, ['log-only marker'], width, 24, show_log=True)
+            self.assertNotIn('log-only marker', hidden)
+            self.assertIn('log-only marker', shown)
+            self.assertIn('L: show log', hidden)
+            self.assertIn('L: hide log', shown)
 
     def test_log_starts_at_current_run_and_includes_partial_lines(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -78,8 +102,8 @@ show_progress 0 Starting
 show_progress 5 "Refresh Ubuntu package metadata"
 printf 'live stdout marker\\n'
 printf 'live stderr marker\\n' >&2
-sleep 0.6
 printf 'renderer=%s\\n' "$UI_DISPLAY_PID" >"$2/child"
+sleep 0.6
 sleep 0.4
 case "$3" in
  success) show_progress 100 "Configuration complete";;
@@ -89,12 +113,16 @@ esac
 ''')
                 master, slave = pty.openpty()
                 fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 30, 132, 0, 0))
-                process = subprocess.Popen(['bash', str(harness), str(ROOT), str(path), mode], stdout=slave, stderr=slave,
+                saved_mode = termios.tcgetattr(slave)
+                def terminal_session():
+                    os.setsid()
+                    fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+                process = subprocess.Popen(['bash' , str(harness), str(ROOT), str(path), mode], stdin=slave, stdout=slave, stderr=slave, preexec_fn=terminal_session,
                                            env={**os.environ, 'TERM': 'xterm-256color', 'NO_COLOR': '1'})
-                os.close(slave)
                 output = bytearray()
                 deadline = time.monotonic() + 8
                 resized = False
+                toggle_step = 0
                 try:
                     while time.monotonic() < deadline:
                         if select.select([master], [], [], 0.1)[0]:
@@ -108,6 +136,16 @@ esac
                             if b'live stderr marker' in output and not resized:
                                 fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
                                 resized = True
+                        if toggle_step == 0 and b'live stderr marker' in output:
+                            os.write(master, b'l')
+                            toggle_step = 1
+                        elif toggle_step == 1 and b'L: show log' in output:
+                            os.write(master, b'L')
+                            toggle_step = 2
+                        elif toggle_step == 2 and output.rfind(b'L: hide log') > output.rfind(b'L: show log'):
+                            toggle_step = 3
+                            if mode == 'cancel':
+                                os.write(master, b'\x03')
                         if process.poll() is not None and not select.select([master], [], [], 0.1)[0]:
                             break
                     self.assertEqual(process.wait(timeout=2), expected)
@@ -118,6 +156,8 @@ esac
                     self.assertIn(message, text)
                     self.assertIn('\x1b[?25h', text)
                     self.assertTrue(resized)
+                    self.assertEqual(toggle_step, 3)
+                    self.assertEqual(termios.tcgetattr(slave), saved_mode)
                     child = int((path / 'child').read_text().split('=')[1])
                     with self.assertRaises(ProcessLookupError):
                         os.kill(child, 0)
@@ -125,6 +165,7 @@ esac
                     if process.poll() is None:
                         process.kill(); process.wait()
                     os.close(master)
+                    os.close(slave)
 
 
 if __name__ == '__main__':

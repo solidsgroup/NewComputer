@@ -169,8 +169,10 @@ bytes.
 
 The terminal splits into a checklist and live installer output. Wide windows
 show the panes side by side; narrower windows stack them, keeping the current
-step visible. Resizing the window adjusts the layout automatically. Verbose APT
-and configuration output is also saved to `/var/log/new-computer-configure.log`.
+step visible. Press **L** to hide or show the log; hiding it gives the checklist
+the full view. The active item has a sliding highlight, which stops when the
+step finishes (disabled with `NO_COLOR`). Resizing adjusts the layout
+automatically. Verbose APT and configuration output is also saved to `/var/log/new-computer-configure.log`.
 Non-interactive runs keep the compact progress messages. If the installer stops,
 the failed checklist item and the relevant script line are shown alongside the log
 location. Set the standard `NO_COLOR` environment variable if you want the
