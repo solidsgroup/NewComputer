@@ -1,0 +1,191 @@
+#!/usr/bin/python3
+"""KDE session agent: browser authentication for the ISU profile only."""
+import os
+from pathlib import Path
+import runpy
+import subprocess
+import sys
+import time
+
+sys.dont_write_bytecode = True
+vpn = runpy.run_path(str(Path(__file__).with_name('isu-vpn')))
+NM = 'org.freedesktop.NetworkManager'
+AGENT = NM + '.SecretAgent'
+ACTIVE = NM + '.Connection.Active'
+PROPS = 'org.freedesktop.DBus.Properties'
+
+
+def handles(connection, setting='vpn'):
+    data = connection.get('vpn', {})
+    return (setting == 'vpn'
+            and connection.get('connection', {}).get('id') == 'ISU'
+            and data.get('service-type') == vpn['SERVICE']
+            and data.get('data', {}).get('gateway') == 'vpn.iastate.edu')
+
+
+def notify(message, error=False):
+    try:
+        subprocess.run(['notify-send', '--app-name=ISU VPN', '--icon=network-vpn',
+                        '--expire-time=5000', '--urgency=normal',
+                        'ISU VPN', message], check=False, timeout=5,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+class Login:
+    """Poll authentication without blocking D-Bus cancellation or persisting tokens."""
+    def __init__(self):
+        self.started = time.monotonic()
+        self.process = subprocess.Popen(vpn['AUTH_COMMAND'], text=True,
+                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL)
+
+    def cancel(self):
+        if self.process.poll() is None:
+            self.process.kill()
+        self.process.communicate()
+
+    def poll(self):
+        if self.process.poll() is None:
+            if time.monotonic() - self.started > 180:
+                self.cancel()
+                raise ValueError('Sign-in timed out. Click Connect to try again.')
+            return None
+        output, _ = self.process.communicate()
+        if self.process.returncode:
+            raise ValueError('Sign-in failed or was cancelled. Click Connect to try again.')
+        return vpn['auth_secrets'](vpn['parse_auth'](output))
+
+
+def main():
+    import dbus
+    import dbus.service
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+
+    if os.geteuid() == 0:
+        raise SystemExit('Run the ISU VPN agent as the desktop user, not root.')
+    DBusGMainLoop(set_as_default=True)
+    # Owning a session-bus name makes autostart and manual startup idempotent.
+    session = dbus.SessionBus()
+    name = dbus.service.BusName('org.solidsgroup.IsuVpn', bus=session, do_not_queue=True)
+    bus = dbus.SystemBus()
+
+    def error(kind, message):
+        return dbus.exceptions.DBusException(message, name=AGENT + '.' + kind)
+
+    class Agent(dbus.service.Object):
+        def __init__(self):
+            super().__init__(bus, '/org/freedesktop/NetworkManager/SecretAgent')
+            self.pending = {}
+            self.active = {}
+            self.registered = False
+            self.initial_scan = True
+
+        def check_sender(self, sender):
+            if sender != bus.get_name_owner(NM):
+                raise error('PermissionDenied', 'Only NetworkManager may request VPN secrets.')
+
+        @dbus.service.method(AGENT, in_signature='a{sa{sv}}osasu',
+                             out_signature='a{sa{sv}}', async_callbacks=('reply', 'fail'),
+                             sender_keyword='sender')
+        def GetSecrets(self, connection, path, setting, hints, flags, reply, fail, sender=None):
+            self.check_sender(sender)
+            if not handles(connection, setting) or not int(flags) & 1:
+                fail(error('NoSecrets', 'This agent only handles interactive ISU VPN login.'))
+                return
+            key = (str(path), str(setting))
+            if key in self.pending:
+                fail(error('UserCanceled', 'ISU sign-in is already in progress.'))
+                return
+            try:
+                self.pending[key] = (Login(), reply, fail)
+            except OSError:
+                fail(error('Failed', 'Unable to start OpenConnect.'))
+                notify('Unable to start OpenConnect.', True)
+
+        @dbus.service.method(AGENT, in_signature='os', sender_keyword='sender')
+        def CancelGetSecrets(self, path, setting, sender=None):
+            self.check_sender(sender)
+            request = self.pending.pop((str(path), str(setting)), None)
+            if request:
+                request[0].cancel()
+                request[2](error('UserCanceled', 'Connection cancelled.'))
+
+        @dbus.service.method(AGENT, in_signature='a{sa{sv}}o', sender_keyword='sender')
+        def SaveSecrets(self, connection, path, sender=None):
+            self.check_sender(sender)  # Session tokens are deliberately never stored.
+
+        @dbus.service.method(AGENT, in_signature='a{sa{sv}}o', sender_keyword='sender')
+        def DeleteSecrets(self, connection, path, sender=None):
+            self.check_sender(sender)
+
+        def tick(self):
+            for key, (login, reply, fail) in list(self.pending.items()):
+                try:
+                    secrets = login.poll()
+                    if secrets is None:
+                        continue
+                    del self.pending[key]
+                    reply({'vpn': {'secrets': dbus.Dictionary(secrets, signature='ss')}})
+                except (ValueError, OSError):
+                    self.pending.pop(key, None)
+                    fail(error('UserCanceled', 'ISU sign-in failed, was cancelled, or timed out.'))
+                    notify('Sign-in failed, was cancelled, or timed out. Click Connect to retry.', True)
+            return True
+
+        def monitor(self):
+            try:
+                if not self.registered:
+                    manager = dbus.Interface(bus.get_object(NM, '/org/freedesktop/NetworkManager/AgentManager'), NM + '.AgentManager')
+                    manager.RegisterWithCapabilities('org.solidsgroup.IsuVpn', dbus.UInt32(1))
+                    self.registered = True
+                props = dbus.Interface(bus.get_object(NM, '/org/freedesktop/NetworkManager'), PROPS)
+                states = {}
+                for path in props.Get(NM, 'ActiveConnections'):
+                    obj = dbus.Interface(bus.get_object(NM, path), PROPS)
+                    data = obj.GetAll(ACTIVE)
+                    if data.get('Id') != 'ISU' or data.get('Type') != 'vpn':
+                        continue
+                    settings = dbus.Interface(bus.get_object(NM, data['Connection']), NM + '.Settings.Connection').GetSettings()
+                    if not handles(settings):
+                        continue
+                    state = int(data['State'])
+                    states[str(path)] = state
+                    if state == 2 and self.active.get(str(path)) != 2 and not self.initial_scan:
+                        notify('Connected to Iowa State University.')
+                    elif state == 4 and self.active.get(str(path)) == 1:
+                        notify('Connection failed. Click Connect to retry.', True)
+                self.active = states
+                self.initial_scan = False
+            except dbus.DBusException as exc:
+                if exc.get_dbus_name() in ('org.freedesktop.DBus.Error.ServiceUnknown',
+                                           'org.freedesktop.DBus.Error.NameHasNoOwner'):
+                    self.registered = False
+            return True
+
+        def nm_changed(self, service, old, new):
+            self.registered = False
+            for login, reply, fail in self.pending.values():
+                login.cancel()
+            self.pending.clear()
+            self.active.clear()
+            self.initial_scan = True
+
+    agent = Agent()
+    bus.add_signal_receiver(agent.nm_changed, signal_name='NameOwnerChanged',
+                            dbus_interface='org.freedesktop.DBus',
+                            bus_name='org.freedesktop.DBus', arg0=NM)
+    agent.monitor()
+    GLib.timeout_add(200, agent.tick)
+    GLib.timeout_add_seconds(1, agent.monitor)
+    try:
+        GLib.MainLoop().run()
+    finally:
+        for login, reply, fail in agent.pending.values():
+            login.cancel()
+
+
+if __name__ == '__main__':
+    main()

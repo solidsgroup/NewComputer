@@ -12,6 +12,8 @@ readonly -a INSTALLER_FILES=(
     "inkscape/patch-textext-warning.py"
     "vpn/isu-vpn"
     "vpn/isu-vpn.desktop"
+    "vpn/isu-vpn-agent"
+    "vpn/isu-vpn-agent.desktop"
     "visit/install-visit-binaries"
     "slack/install-slack-math"
     "wallpaper/solidsgroup.png"

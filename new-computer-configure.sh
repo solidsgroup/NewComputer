@@ -61,6 +61,8 @@ for required_file in \
     "$DESKTOP_WALLPAPER_SOURCE" \
     "$KDE_SETTINGS_SOURCE" \
     "$INKSCAPE_LAUNCHER_SOURCE" \
+    "$SCRIPT_DIR/vpn/isu-vpn-agent" \
+    "$SCRIPT_DIR/vpn/isu-vpn-agent.desktop" \
     "$ISU_VPN_SOURCE" \
     "$ISU_VPN_DESKTOP_SOURCE" \
     "$TEXTEXT_PATCH_SOURCE" \
@@ -648,6 +650,9 @@ show_progress 62 "Install standard software and development tools"
     openconnect \
     network-manager-openconnect \
     network-manager-openconnect-gnome \
+    python3-dbus \
+    python3-gi \
+    libnotify-bin \
     meld \
     python3-pip \
     python3-setuptools \
@@ -665,6 +670,8 @@ show_progress 62 "Install standard software and development tools"
 # Configure the official ISU gateway; authentication remains interactive.
 install -Dm755 "$ISU_VPN_SOURCE" /usr/local/bin/isu-vpn
 install -Dm644 "$ISU_VPN_DESKTOP_SOURCE" /usr/local/share/applications/isu-vpn.desktop
+install -Dm755 "$SCRIPT_DIR/vpn/isu-vpn-agent" /usr/local/bin/isu-vpn-agent
+install -Dm644 "$SCRIPT_DIR/vpn/isu-vpn-agent.desktop" /etc/xdg/autostart/isu-vpn-agent.desktop
 python3 /usr/local/bin/isu-vpn --configure
 
 # Avoid Inkscape's misleading additional-data dialog on newer PyGObject.

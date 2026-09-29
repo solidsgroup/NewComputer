@@ -189,6 +189,9 @@ assert_trace_matches \
 assert_trace_matches '^apt-get .* install .*ffmpeg'
 assert_file_contains 'python3 /usr/local/bin/isu-vpn --configure' "$COMMAND_TRACE"
 cmp "$REPOSITORY_DIR/vpn/isu-vpn" /usr/local/bin/isu-vpn
+cmp "$REPOSITORY_DIR/vpn/isu-vpn-agent" /usr/local/bin/isu-vpn-agent
+cmp "$REPOSITORY_DIR/vpn/isu-vpn-agent.desktop" /etc/xdg/autostart/isu-vpn-agent.desktop
+assert_trace_matches '^apt-get .* install .*python3-dbus.*python3-gi.*libnotify-bin'
 cmp "$REPOSITORY_DIR/vpn/isu-vpn.desktop" /usr/local/share/applications/isu-vpn.desktop
 assert_trace_matches '^apt-get .* install .*openconnect.*network-manager-openconnect.*network-manager-openconnect-gnome'
 assert_trace_matches '^apt-get .* install .*python3-setuptools.*nodejs.*npm'

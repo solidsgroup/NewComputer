@@ -16,6 +16,16 @@ VPN_DATA = (
     "cookie-flags=2,gateway-flags=2,gwcert-flags=2,resolve-flags=2"
 )
 
+AUTH_COMMAND = ["openconnect", "--authenticate", "--protocol=anyconnect",
+                "--authgroup=Primary", "--useragent=AnyConnect",
+                "--external-browser=/usr/bin/xdg-open", "https://vpn.iastate.edu"]
+
+
+def auth_secrets(values):
+    fields = {"cookie": "COOKIE", "gateway": "CONNECT_URL", "gwcert": "FINGERPRINT",
+              "resolve": "RESOLVE"}
+    return {key: values[value] for key, value in fields.items() if values.get(value)}
+
 
 def run(*args, **kwargs):
     return subprocess.run(args, check=True, text=True, **kwargs)
@@ -81,15 +91,9 @@ def connect():
     if not uuid:
         raise ValueError("ISU profile missing. Run sudo isu-vpn --configure first.")
     print("Sign in through ISU's browser page and complete MFA.", flush=True)
-    result = run("openconnect", "--authenticate", "--protocol=anyconnect",
-                 "--authgroup=Primary", "--useragent=AnyConnect",
-                 "--external-browser=/usr/bin/xdg-open", "https://vpn.iastate.edu",
-                 stdout=subprocess.PIPE)
-    values = parse_auth(result.stdout)
-    fields = {"cookie": "COOKIE", "gateway": "CONNECT_URL", "gwcert": "FINGERPRINT",
-              "resolve": "RESOLVE"}
-    secrets = "".join(f"vpn.secrets.{key}:{values[value]}\n"
-                      for key, value in fields.items() if values.get(value))
+    result = run(*AUTH_COMMAND, stdout=subprocess.PIPE)
+    secrets = "".join(f"vpn.secrets.{key}:{value}\n"
+                      for key, value in auth_secrets(parse_auth(result.stdout)).items())
     # Anonymous memory file: tokens never enter argv or a persistent disk file.
     fd = os.memfd_create("isu-vpn-session", os.MFD_CLOEXEC)
     try:

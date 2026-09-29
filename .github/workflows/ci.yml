@@ -42,7 +42,9 @@ jobs:
         run: bash tests/inkscape-launcher-test.sh
 
       - name: Check ISU VPN configuration and authentication handoff
-        run: python3 tests/isu-vpn-test.py
+        run: |
+          python3 tests/isu-vpn-test.py
+          python3 tests/isu-vpn-agent-test.py
 
       - name: Check TexText warning compatibility
         run: python3 tests/textext-warning-test.py

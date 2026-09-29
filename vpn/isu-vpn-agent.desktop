@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ISU VPN browser login
+Comment=Use browser sign-in when connecting to ISU from the KDE network panel
+Exec=/usr/local/bin/isu-vpn-agent
+OnlyShowIn=KDE;
+X-KDE-autostart-after=panel
+NoDisplay=true

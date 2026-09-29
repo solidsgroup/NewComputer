@@ -19,17 +19,26 @@ Rerun the installer if a TexText package update replaces the patched file.
 The installer configures an `ISU` OpenConnect VPN connection on both Ubuntu
 releases, using the server `vpn.iastate.edu` and **Primary** group from
 [ISU's official VPN instructions (KB0011105)](https://iastate.service-now.com/it?id=kb_article&sysparm_article=KB0011105).
-Open **ISU VPN** in the application menu, or run `isu-vpn` in a terminal without
-sudo. Complete the Sign On Dashboard login and MFA in your browser. The launcher
-then activates the connection through NetworkManager; disconnect using the
+In KDE, click **Connect** beside **ISU** in the network panel. A session login
+agent opens your usual browser and shows a short notification once the VPN is
+connected. The agent starts automatically at login and handles only the ISU
+OpenConnect profile; other connections retain their normal login dialogs. After
+installing in an existing desktop session, log out and back in, or run
+`isu-vpn-agent` to start it immediately. Browser sign-in times out after three
+minutes; clicking Disconnect cancels a pending sign-in.
+
+You can also open **ISU VPN** in the application menu or run `isu-vpn` in a
+terminal without sudo. Complete the Sign On Dashboard login and MFA in your
+browser. The login handler then activates the connection through NetworkManager; disconnect using the
 network panel or `nmcli connection down ISU`.
 
 ISU documents Cisco Secure Client; this installer adapts those settings for
 OpenConnect. The generic `AnyConnect` user agent enables the gateway's browser
-login flow, as verified against the live gateway. The launcher explicitly selects
-Primary and avoids desktop-specific embedded-browser limitations. Login tokens
+login flow, as verified against the live gateway. The login handler explicitly
+selects Primary and avoids desktop-specific embedded-browser limitations. Login tokens
 are handed to NetworkManager in memory, never put in command arguments or saved
-to disk by the launcher. The installer never signs in or connects automatically.
+to disk by the login handler. The installer never signs in or connects
+automatically.
 Server-provided routes and DNS are accepted, with default routes disabled so
 non-ISU traffic keeps using the usual connection, as described by ISU.
 
