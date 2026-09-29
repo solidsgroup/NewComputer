@@ -27,7 +27,7 @@ class DisplayTests(unittest.TestCase):
         checklist = ['Title', 'Subtitle', 'Rule', 'Progress'] + [f'○ step {i}' for i in range(16)] + ['Status', 'Log']
         checklist[14] = '● Install and configure ISU VPN'
         for width, height in [(132, 30), (80, 24), (45, 12), (20, 5)]:
-            frame = display.frame(checklist, ['live output\x1b[2J', '\x1b]0;bad title\x07safe'], width, height)
+            frame = display.frame(checklist, ['live output\x1b[2J', '\x1b]0;bad title\x07safe'], width, height, show_log=True)
             self.assertLessEqual(len(frame.split('\r\n')), height - 1)
             self.assertIn('LIVE OUTPUT', frame)
             self.assertNotIn('bad title', frame)
@@ -44,7 +44,8 @@ class DisplayTests(unittest.TestCase):
             second = display.styled(active, 60, phase=1)
             self.assertNotEqual(first, second)
             self.assertEqual(display.plain(first), display.plain(second))
-            self.assertIn(';48;2;', second)
+            self.assertIn('38;2;255;255;255m', second)
+            self.assertNotIn('48;', first + second)
             for line in ['  ✓  Finished', '  ○  Pending', '  ×  Failed', '  ● Working']:
                 self.assertEqual(display.styled(line, 60, phase=0),
                                  display.styled(line, 60, phase=1))
@@ -52,7 +53,7 @@ class DisplayTests(unittest.TestCase):
             self.assertEqual(display.styled(active, 60, phase=0),
                              display.styled(active, 60, phase=1))
         for width in [80, 132]:
-            hidden = display.frame(checklist, ['log-only marker'], width, 24, show_log=False)
+            hidden = display.frame(checklist, ['log-only marker'], width, 24)
             shown = display.frame(checklist, ['log-only marker'], width, 24, show_log=True)
             self.assertNotIn('log-only marker', hidden)
             self.assertIn('log-only marker', shown)
@@ -136,13 +137,13 @@ esac
                             if b'live stderr marker' in output and not resized:
                                 fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
                                 resized = True
-                        if toggle_step == 0 and b'live stderr marker' in output:
+                        if toggle_step == 0 and b'L: show log' in output:
                             os.write(master, b'l')
                             toggle_step = 1
-                        elif toggle_step == 1 and b'L: show log' in output:
+                        elif toggle_step == 1 and b'live stderr marker' in output and b'L: hide log' in output:
                             os.write(master, b'L')
                             toggle_step = 2
-                        elif toggle_step == 2 and output.rfind(b'L: hide log') > output.rfind(b'L: show log'):
+                        elif toggle_step == 2 and output.rfind(b'L: show log') > output.rfind(b'L: hide log'):
                             toggle_step = 3
                             if mode == 'cancel':
                                 os.write(master, b'\x03')

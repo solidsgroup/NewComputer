@@ -40,11 +40,8 @@ def shimmer(text, phase):
     result = '\x1b[38;2;255;127;14m' + prefix + '\x1b[0m\x1b[1m'
     for index, char in enumerate(label):
         strength = max(0, 1 - abs(index - center) / 5)
-        if strength:
-            shade = int(35 + 40 * strength)
-            result += f'\x1b[38;2;255;235;204;48;2;{shade};{int(shade * .7)};{int(shade * .4)}m{char}\x1b[0m\x1b[1m'
-        else:
-            result += char
+        shade = int(175 + 80 * strength)
+        result += f'\x1b[38;2;{shade};{shade};{shade}m{char}'
     return result + '\x1b[0m'
 
 
@@ -91,7 +88,7 @@ def checklist_view(lines, height):
     return head + body[start:start + count] + foot
 
 
-def frame(checklist, logs, columns, rows, show_log=True, phase=None, keyboard=True):
+def frame(checklist, logs, columns, rows, show_log=False, phase=None, keyboard=True):
     # Leave the last column and row unused to avoid terminal autowrap/scroll.
     width, height = max(1, columns - 1), max(1, rows - 1)
     footer = keyboard and height > 3
@@ -194,7 +191,7 @@ def main():
     tail = LogTail(args.log, args.offset)
     previous = None
     keyboard = Keyboard()
-    show_log = True
+    show_log = False
     print('\x1b[?25l\x1b[2J', end='', flush=True)
     try:
         while True:
