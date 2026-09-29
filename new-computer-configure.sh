@@ -43,6 +43,7 @@ readonly -a UI_STEPS=(
     "Configure KDE power, lock screen, and dark theme defaults"
     "Configure the Slick Greeter login screen"
     "Install standard software and development tools"
+    "Install and configure ISU VPN"
     "Install LLNL VisIt 3.5 and 3.4"
     "Ensure Google Chrome is installed"
     "Install Slack desktop and math rendering"
@@ -57,6 +58,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 for required_file in \
+    "$SCRIPT_DIR/ui/installer-display.py" \
     "$LOGIN_WALLPAPER_SOURCE" \
     "$DESKTOP_WALLPAPER_SOURCE" \
     "$KDE_SETTINGS_SOURCE" \
@@ -97,9 +99,12 @@ fi
 
 touch "$LOG_FILE"
 
-# Keep the interface on the original stdout while sending verbose command
-# output only to the persistent log. Under systemd, fd 3 is captured by the
-# journal and receives a compact, non-interactive version of the checklist.
+# Preserve the original terminal for the display; command output always goes
+# to the persistent log. A separate renderer tails this run in interactive use.
+# Non-interactive runs retain the compact checklist.
+UI_LOG_OFFSET="$(stat -c %s "$LOG_FILE")"
+UI_DISPLAY_PID=""
+UI_DISPLAY_DIR=""
 exec 3>&1
 exec >>"$LOG_FILE" 2>&1
 printf '\n===== Solids Group setup started %s =====\n' "$(date --iso-8601=seconds)"
@@ -122,6 +127,26 @@ ui_color() {
 }
 
 render_ui() {
+    [[ "$UI_IS_TTY" == true ]] || return 0
+    if ! command -v python3 >/dev/null 2>&1; then
+        printf '\033[2J\033[H' >&3
+        render_checklist
+        return
+    fi
+    if [[ -z "$UI_DISPLAY_DIR" ]]; then
+        UI_DISPLAY_DIR="$(mktemp -d)"
+    fi
+    render_checklist 3>"$UI_DISPLAY_DIR/checklist.tmp"
+    mv "$UI_DISPLAY_DIR/checklist.tmp" "$UI_DISPLAY_DIR/checklist"
+    if [[ -z "$UI_DISPLAY_PID" ]]; then
+        python3 "$SCRIPT_DIR/ui/installer-display.py" \
+            --state "$UI_DISPLAY_DIR/checklist" --log "$LOG_FILE" \
+            --offset "$UI_LOG_OFFSET" --parent "$$" 9>&- >&3 &
+        UI_DISPLAY_PID=$!
+    fi
+}
+
+render_checklist() {
     local blue
     local orange
     local bold
@@ -156,8 +181,6 @@ render_ui() {
     completed_bar="${completed_bar// /━}"
     remaining_bar="${remaining_bar// /─}"
 
-    # Redraw in place so package installation never scrolls the checklist away.
-    printf '\033[2J\033[H' >&3
     printf '  %s◆%s  %sSOLID MECHANICS%s\n' "$blue" "$reset" "$bold" "$reset" >&3
     printf '     %sRESEARCH GROUP%s  %s·  UBUNTU %s SETUP%s\n' \
         "$orange" "$reset" "$dim" "$VERSION_ID" "$reset" >&3
@@ -198,7 +221,7 @@ render_ui() {
                 "$orange" "$reset" >&3
             ;;
         *)
-            printf '  %s● Working%s  ·  Detailed activity is hidden\n' \
+            printf '  %s● Working%s  ·  Live activity in the output pane\n' \
                 "$orange" "$reset" >&3
             ;;
     esac
@@ -314,6 +337,13 @@ finish() {
         fi
     fi
 
+    if [[ -n "$UI_DISPLAY_PID" ]]; then
+        kill -TERM "$UI_DISPLAY_PID" 2>/dev/null || true
+        wait "$UI_DISPLAY_PID" || true
+    fi
+    if [[ -n "$UI_DISPLAY_DIR" ]]; then
+        rm -rf -- "$UI_DISPLAY_DIR"
+    fi
     exit "$exit_status"
 }
 trap finish EXIT
@@ -647,11 +677,6 @@ show_progress 62 "Install standard software and development tools"
     libtclap-dev \
     libmuparser-dev \
     openssh-server \
-    openconnect \
-    network-manager-openconnect \
-    network-manager-openconnect-gnome \
-    python3-dbus \
-    python3-gi \
     meld \
     python3-pip \
     python3-setuptools \
@@ -665,13 +690,6 @@ show_progress 62 "Install standard software and development tools"
     texlive-science \
     latexmk \
     ufw
-
-# Configure the official ISU gateway; authentication remains interactive.
-install -Dm755 "$ISU_VPN_SOURCE" /usr/local/bin/isu-vpn
-install -Dm644 "$ISU_VPN_DESKTOP_SOURCE" /usr/local/share/applications/isu-vpn.desktop
-install -Dm755 "$SCRIPT_DIR/vpn/isu-vpn-agent" /usr/local/bin/isu-vpn-agent
-install -Dm644 "$SCRIPT_DIR/vpn/isu-vpn-agent.desktop" /etc/xdg/autostart/isu-vpn-agent.desktop
-python3 /usr/local/bin/isu-vpn --configure
 
 # Avoid Inkscape's misleading additional-data dialog on newer PyGObject.
 if [[ "$VERSION_ID" == 26.04 ]]; then
@@ -688,6 +706,21 @@ if [[ "$VERSION_ID" == 26.04 ]]; then
         /usr/share/applications/org.inkscape.Inkscape.desktop \
         > /usr/local/share/applications/org.inkscape.Inkscape.desktop
 fi
+
+show_progress 68 "Install and configure ISU VPN"
+"${APT_GET[@]}" install \
+    openconnect \
+    network-manager-openconnect \
+    network-manager-openconnect-gnome \
+    python3-dbus \
+    python3-gi
+
+# Configure the official ISU gateway; authentication remains interactive.
+install -Dm755 "$ISU_VPN_SOURCE" /usr/local/bin/isu-vpn
+install -Dm644 "$ISU_VPN_DESKTOP_SOURCE" /usr/local/share/applications/isu-vpn.desktop
+install -Dm755 "$SCRIPT_DIR/vpn/isu-vpn-agent" /usr/local/bin/isu-vpn-agent
+install -Dm644 "$SCRIPT_DIR/vpn/isu-vpn-agent.desktop" /etc/xdg/autostart/isu-vpn-agent.desktop
+python3 /usr/local/bin/isu-vpn --configure
 
 # Install LLNL's official release binary distributions directly. This avoids
 # the interactive visit-install script while retaining side-by-side versions.

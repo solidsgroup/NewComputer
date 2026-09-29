@@ -171,6 +171,8 @@ assert_file_contains "Configuration completed successfully" \
     /var/log/new-computer-configure.log
 assert_file_contains "[ 62%] Install standard software and development tools" \
     /var/log/new-computer-configure.log
+assert_file_contains "[ 68%] ● Install and configure ISU VPN" "$UI_OUTPUT"
+assert_file_contains "[ 68%] Install and configure ISU VPN" /var/log/new-computer-configure.log
 assert_file_contains "[ 72%] Install LLNL VisIt 3.5 and 3.4" \
     /var/log/new-computer-configure.log
 assert_file_contains "[ 55%] Configure the Slick Greeter login screen" \

@@ -163,12 +163,16 @@ is visible.
 
 The script opens a Solids Group-branded terminal checklist using the group's
 blue and orange colors. Completed, active, pending, and failed phases remain
-visible while the installer runs. The percentage marks the overall phase
-position rather than package download bytes.
+visible while the installer runs, including a separate ISU VPN setup step.
+The percentage marks the overall phase position rather than package download
+bytes.
 
-Verbose APT and configuration output is hidden from the interface and
-written to `/var/log/new-computer-configure.log`. If the installer stops, the
-failed checklist item and the relevant script line are shown alongside the log
+The terminal splits into a checklist and live installer output. Wide windows
+show the panes side by side; narrower windows stack them, keeping the current
+step visible. Resizing the window adjusts the layout automatically. Verbose APT
+and configuration output is also saved to `/var/log/new-computer-configure.log`.
+Non-interactive runs keep the compact progress messages. If the installer stops,
+the failed checklist item and the relevant script line are shown alongside the log
 location. Set the standard `NO_COLOR` environment variable if you want the
 same interface without color:
 

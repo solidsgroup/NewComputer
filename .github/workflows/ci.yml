@@ -38,6 +38,9 @@ jobs:
             bash -n "$script"
           done
 
+      - name: Check live terminal display
+        run: python3 tests/installer-display-test.py
+
       - name: Check Inkscape menu launcher
         run: bash tests/inkscape-launcher-test.sh
 
