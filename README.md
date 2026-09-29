@@ -8,6 +8,11 @@ Slick Greeter as the login manager, installs the standard software used by the
 group—including Google Chrome, Slack desktop, Node.js, and npm—and configures
 the supplied wallpapers.
 
+Inkscape includes the TexText extension through Ubuntu's `inkscape-textext`
+package, along with its dependencies and the installer's TeX Live packages.
+After installation, restart Inkscape and open **Extensions → TexText** to
+insert and re-edit LaTeX graphics.
+
 On Ubuntu 26.04, Inkscape uses a launcher that disables global-menu forwarding
 in KDE and selects X11/XWayland in KDE Wayland sessions. This keeps its menu
 inside the application window and avoids the disappearing-menu issue. The

@@ -627,6 +627,7 @@ show_progress 62 "Install standard software and development tools"
     emacs \
     evince \
     inkscape \
+    inkscape-textext \
     ffmpeg \
     mpich \
     python-is-python3 \
