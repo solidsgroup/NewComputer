@@ -652,7 +652,6 @@ show_progress 62 "Install standard software and development tools"
     network-manager-openconnect-gnome \
     python3-dbus \
     python3-gi \
-    libnotify-bin \
     meld \
     python3-pip \
     python3-setuptools \

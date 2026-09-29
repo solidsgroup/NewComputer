@@ -20,8 +20,8 @@ The installer configures an `ISU` OpenConnect VPN connection on both Ubuntu
 releases, using the server `vpn.iastate.edu` and **Primary** group from
 [ISU's official VPN instructions (KB0011105)](https://iastate.service-now.com/it?id=kb_article&sysparm_article=KB0011105).
 In KDE, click **Connect** beside **ISU** in the network panel. A session login
-agent opens your usual browser and shows a short notification once the VPN is
-connected. The agent starts automatically at login and handles only the ISU
+agent opens your usual browser; KDE NetworkManager provides connection
+notifications. The agent starts automatically at login and handles only the ISU
 OpenConnect profile; other connections retain their normal login dialogs. After
 installing in an existing desktop session, log out and back in, or run
 `isu-vpn-agent` to start it immediately. Browser sign-in times out after three

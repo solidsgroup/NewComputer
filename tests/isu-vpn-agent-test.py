@@ -40,17 +40,15 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(spawn.call_args.kwargs['stderr'], subprocess.DEVNULL)
             return login
 
-    def test_success_returns_tokens_without_notification_before_tunnel(self):
+    def test_success_returns_tokens(self):
         process = Mock(returncode=0)
         process.poll.return_value = 0
         process.communicate.return_value = (
             "COOKIE='test-token'\nCONNECT_URL='https://vpn.iastate.edu'\n"
             "FINGERPRINT='sha256:abc'\nRESOLVE='vpn.iastate.edu:192.0.2.1'\n", None)
-        with patch.object(agent, 'notify') as notify:
-            secrets = self.login(process).poll()
-            self.assertEqual(secrets['cookie'], 'test-token')
-            self.assertEqual(secrets['resolve'], 'vpn.iastate.edu:192.0.2.1')
-            notify.assert_not_called()
+        secrets = self.login(process).poll()
+        self.assertEqual(secrets['cookie'], 'test-token')
+        self.assertEqual(secrets['resolve'], 'vpn.iastate.edu:192.0.2.1')
 
     def test_pending_and_cancel_reaps_process(self):
         process = Mock()
@@ -78,9 +76,6 @@ class AgentTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.login(process).poll()
 
-    def test_notification_failure_is_nonfatal(self):
-        with patch.object(agent.subprocess, 'run', side_effect=FileNotFoundError):
-            agent.notify('Connected')
 
 
 if __name__ == '__main__':
