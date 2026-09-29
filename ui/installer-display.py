@@ -30,16 +30,29 @@ def clip(text, width):
 
 
 def styled(text, width):
+    """Clip checklist text while retaining its original per-element SGR colors."""
+    if os.environ.get('NO_COLOR'):
+        return clip(text, width)
+    result = ''
+    used = 0
+    for part in re.split(r'(\x1b\[[0-9;]*m)', text):
+        if re.fullmatch(r'\x1b\[[0-9;]*m', part):
+            result += part
+            continue
+        for char in plain(part):
+            size = 0 if unicodedata.combining(char) else (2 if unicodedata.east_asian_width(char) in 'WF' else 1)
+            if used + size > width:
+                return result + '\x1b[0m' + ' ' * (width - used)
+            result += char
+            used += size
+    return result + '\x1b[0m' + ' ' * max(0, width - used)
+
+
+def muted(text, width):
     line = clip(text, width)
     if os.environ.get('NO_COLOR'):
         return line
-    if any(c in line for c in '●×■'):
-        color = '\x1b[38;2;255;127;14m'
-    elif '○' in line:
-        color = '\x1b[2m'
-    else:
-        color = '\x1b[38;2;31;119;180m'
-    return color + line + '\x1b[0m'
+    return '\x1b[38;2;145;151;160m' + line + '\x1b[0m'
 
 
 def checklist_view(lines, height):
@@ -66,14 +79,14 @@ def frame(checklist, logs, columns, rows):
         a = checklist_view(checklist, height - 1)
         b = list(logs)[-(height - 1):]
         b += [''] * (height - 1 - len(b))
-        lines = [styled(' INSTALLATION CHECKLIST', left) + ' │ ' + clip('LIVE OUTPUT', right)]
-        lines += [styled(x, left) + ' │ ' + clip(y, right) for x, y in zip(a, b)]
+        lines = [styled('\x1b[1;38;2;31;119;180m INSTALLATION CHECKLIST', left) + muted(' │ ', 3) + muted('LIVE OUTPUT', right)]
+        lines += [styled(x, left) + muted(' │ ', 3) + muted(y, right) for x, y in zip(a, b)]
     else:
         log_height = max(1, height // 3)
         checklist_height = max(0, height - log_height - 1)
         lines = [styled(x, width) for x in checklist_view(checklist, checklist_height)]
-        lines += [clip('─ LIVE OUTPUT ' + '─' * width, width)]
-        lines += [clip(x, width) for x in list(logs)[-log_height:]]
+        lines += [muted('─ LIVE OUTPUT ' + '─' * width, width)]
+        lines += [muted(x, width) for x in list(logs)[-log_height:]]
     lines = (lines + [''] * height)[:height]
     return '\x1b[H' + '\r\n'.join(line + '\x1b[K' for line in lines) + '\x1b[J'
 
