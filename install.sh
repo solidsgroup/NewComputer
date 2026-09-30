@@ -10,6 +10,7 @@ readonly -a INSTALLER_FILES=(
     "ui/installer-display.py"
     "kde/set-solids-kde-settings"
     "kde/inkscape-with-local-menu"
+    "inkscape/disable-duplicate-textext"
     "inkscape/patch-textext-warning.py"
     "vpn/isu-vpn"
     "vpn/isu-vpn.desktop"

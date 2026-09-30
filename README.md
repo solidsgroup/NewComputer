@@ -37,6 +37,10 @@ Neither command requires a Git clone. Both run without installation prompts and 
 
 - **ISU VPN:** click **Connect** beside **ISU** in KDE, or run `isu-vpn`. Complete browser sign-in and MFA. Uses `vpn.iastate.edu`, the **Primary** group, and split routing based on [official ISU instructions](https://iastate.service-now.com/it?id=kb_article&sysparm_article=KB0011105), adapted for OpenConnect. VPN login is not part of the unattended installation.
 - **TexText:** restart Inkscape, then open **Extensions → Text → TexText**.
+  If an account already has a manually installed TexText copy, the installer
+  disables that duplicate so it cannot conflict with Ubuntu's package. The
+  old copy is retained under `~/.config/inkscape/disabled-extensions`, and its
+  `default_packages.tex` remains active at the original configured path.
 - **Slack math:** restart Slack; use `$ ... $` or `$$ ... $$`. Rendering requires the patch on each viewer's desktop. After a Slack update, close Slack and run `sudo /usr/local/sbin/install-slack-math` to reapply it.
 - **VisIt:** use `visit` or `visit3.5` for 3.5.0, and `visit3.4` for 3.4.2.
 

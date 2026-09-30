@@ -1,0 +1,45 @@
+#!/bin/bash
+
+set -Eeuo pipefail
+
+readonly USER_HOME="${1:?Usage: $0 USER_HOME}"
+readonly INKSCAPE_PROFILE="$USER_HOME/.config/inkscape"
+readonly USER_TEXTEXT="$INKSCAPE_PROFILE/extensions/textext"
+readonly USER_DESCRIPTOR="$USER_TEXTEXT/textext.inx"
+readonly BACKUP_ROOT="$INKSCAPE_PROFILE/disabled-extensions"
+
+# A user-installed TexText descriptor and Ubuntu's inkscape-textext package
+# register the same extension ID. Inkscape can then lose the descriptor's base
+# path and invoke `python3 .`, treating the document directory as a module.
+[[ -f "$USER_DESCRIPTOR" ]] || exit 0
+
+owner="$(stat -c '%u:%g' "$USER_HOME")"
+timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+backup="$BACKUP_ROOT/textext-$timestamp"
+suffix=0
+while [[ -e "$backup" ]]; do
+    suffix=$((suffix + 1))
+    backup="$BACKUP_ROOT/textext-$timestamp-$suffix"
+done
+
+mkdir -p "$BACKUP_ROOT"
+mv -- "$USER_TEXTEXT" "$backup"
+
+# TexText stores a configured preamble path in ~/.config/textext/config.json.
+# Keep that file at its original location without retaining Python modules or
+# an .inx descriptor that could shadow the package-managed extension.
+mkdir -p "$USER_TEXTEXT"
+if [[ -f "$backup/default_packages.tex" ]]; then
+    cp -p -- "$backup/default_packages.tex" \
+        "$USER_TEXTEXT/default_packages.tex"
+fi
+
+if [[ $EUID -eq 0 ]]; then
+    chown "$owner" "$BACKUP_ROOT" "$USER_TEXTEXT"
+    if [[ -f "$USER_TEXTEXT/default_packages.tex" ]]; then
+        chown "$owner" "$USER_TEXTEXT/default_packages.tex"
+    fi
+fi
+
+printf 'Disabled duplicate TexText extension for %s; backup: %s\n' \
+    "$USER_HOME" "$backup"

@@ -205,6 +205,11 @@ assert_file_not_contains '/tmp/slack-desktop.' "$CHROME_SKIP_TRACE"
 assert_file_contains '--app-file /usr/lib/slack/resources/app.asar' "$CHROME_SKIP_TRACE"
 bash -n /usr/local/sbin/install-slack-math
 assert_file_contains 'kde/inkscape-with-local-menu' "$REPOSITORY_DIR/install.sh"
+assert_file_contains 'inkscape/disable-duplicate-textext' \
+    "$REPOSITORY_DIR/install.sh"
+assert_file_contains \
+    'bash "$TEXTEXT_DUPLICATE_CLEANUP_SOURCE" "$user_home"' \
+    "$REPOSITORY_DIR/new-computer-configure.sh"
 if [[ "$EXPECTED_UBUNTU_VERSION" == 26.04 ]]; then
     assert_file_contains "inkscape/patch-textext-warning.py /usr/share/inkscape/extensions/textext/asktext.py" "$COMMAND_TRACE"
     cmp "$REPOSITORY_DIR/kde/inkscape-with-local-menu" /usr/local/bin/inkscape

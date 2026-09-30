@@ -33,6 +33,8 @@ jobs:
           for script in install.sh new-computer-configure.sh \
             kde/set-solids-kde-settings visit/install-visit-binaries \
             kde/inkscape-with-local-menu tests/inkscape-launcher-test.sh \
+            inkscape/disable-duplicate-textext \
+            tests/textext-user-extension-test.sh \
             slack/install-slack-math tests/installer-smoke-test.sh \
             tests/mock-system-command; do
             bash -n "$script"
@@ -53,7 +55,9 @@ jobs:
           python3 tests/isu-vpn-agent-test.py
 
       - name: Check TexText warning compatibility
-        run: python3 tests/textext-warning-test.py
+        run: |
+          python3 tests/textext-warning-test.py
+          bash tests/textext-user-extension-test.sh
 
       - name: Refresh package indexes and check external downloads
         run: |

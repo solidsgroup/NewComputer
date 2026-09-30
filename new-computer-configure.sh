@@ -15,6 +15,7 @@ KDE_SETTINGS_SOURCE="$SCRIPT_DIR/kde/set-solids-kde-settings"
 INKSCAPE_LAUNCHER_SOURCE="$SCRIPT_DIR/kde/inkscape-with-local-menu"
 ISU_VPN_SOURCE="$SCRIPT_DIR/vpn/isu-vpn"
 ISU_VPN_DESKTOP_SOURCE="$SCRIPT_DIR/vpn/isu-vpn.desktop"
+TEXTEXT_DUPLICATE_CLEANUP_SOURCE="$SCRIPT_DIR/inkscape/disable-duplicate-textext"
 TEXTEXT_PATCH_SOURCE="$SCRIPT_DIR/inkscape/patch-textext-warning.py"
 SLACK_MATH_INSTALLER_SOURCE="$SCRIPT_DIR/slack/install-slack-math"
 VISIT_INSTALLER_SOURCE="$SCRIPT_DIR/visit/install-visit-binaries"
@@ -67,6 +68,7 @@ for required_file in \
     "$SCRIPT_DIR/vpn/isu-vpn-agent.desktop" \
     "$ISU_VPN_SOURCE" \
     "$ISU_VPN_DESKTOP_SOURCE" \
+    "$TEXTEXT_DUPLICATE_CLEANUP_SOURCE" \
     "$TEXTEXT_PATCH_SOURCE" \
     "$VISIT_INSTALLER_SOURCE" \
     "$SLACK_MATH_INSTALLER_SOURCE"; do
@@ -690,6 +692,27 @@ show_progress 62 "Install standard software and development tools"
     texlive-science \
     latexmk \
     ufw
+
+# Prefer Ubuntu's package-managed TexText extension. A legacy per-user copy
+# registers the same extension ID and can make Inkscape invoke `python3 .`
+# instead of TexText's __main__.py. Preserve each copy in a recoverable backup
+# and retain its preamble file at the configured path.
+uid_min="$(awk '$1 == "UID_MIN" { print $2; exit }' /etc/login.defs)"
+uid_max="$(awk '$1 == "UID_MAX" { print $2; exit }' /etc/login.defs)"
+uid_min="${uid_min:-1000}"
+uid_max="${uid_max:-60000}"
+while IFS=: read -r _ _ user_uid _ _ user_home user_shell; do
+    if (( user_uid < uid_min || user_uid > uid_max )) || \
+       [[ ! -d "$user_home" ]]; then
+        continue
+    fi
+    case "$user_shell" in
+        */false|*/nologin)
+            continue
+            ;;
+    esac
+    bash "$TEXTEXT_DUPLICATE_CLEANUP_SOURCE" "$user_home"
+done < <(getent passwd)
 
 # Avoid Inkscape's misleading additional-data dialog on newer PyGObject.
 if [[ "$VERSION_ID" == 26.04 ]]; then
