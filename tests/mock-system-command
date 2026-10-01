@@ -103,6 +103,15 @@ EOF
             /usr/bin/tar -czf "$output_file" \
                 -C "$archive_source" "$distribution"
             rm -rf -- "$archive_source"
+        elif [[ "$request_url" == https://nodejs.org/dist/*/node-*-linux-x64.tar.xz ]]; then
+            archive_source="$(mktemp -d)"
+            mkdir -p "$archive_source/node/bin"
+            for executable in node npm codex claude gemini; do
+                printf '#!/bin/sh\necho synthetic-cli-version\n' >"$archive_source/node/bin/$executable"
+                chmod 755 "$archive_source/node/bin/$executable"
+            done
+            /usr/bin/tar -cJf "$output_file" -C "$archive_source" node
+            rm -rf -- "$archive_source"
         elif [[ -n "$output_file" ]]; then
             : >"$output_file"
         fi
@@ -138,7 +147,7 @@ EOF
     ln)
         destination="${!#}"
         case "$destination" in
-            /opt/visit/*|/usr/local/bin/visit*)
+            /opt/visit/*|/usr/local/bin/visit*|/opt/new-computer-ai-cli/*|/usr/local/bin/codex|/usr/local/bin/claude|/usr/local/bin/gemini)
                 /usr/bin/ln "$@"
                 ;;
         esac

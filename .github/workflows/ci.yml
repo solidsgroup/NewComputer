@@ -36,7 +36,7 @@ jobs:
             inkscape/disable-duplicate-textext \
             tests/textext-user-extension-test.sh \
             slack/install-slack-math tests/installer-smoke-test.sh \
-            tests/mock-system-command; do
+            cli/install-ai-clis tests/mock-system-command; do
             bash -n "$script"
           done
 
@@ -75,6 +75,15 @@ jobs:
               "https://github.com/visit-dav/visit/releases/download/v${version_and_asset}" \
               >/dev/null
           done
+
+      - name: Install and launch the real AI CLIs
+        run: |
+          sudo apt-get install -y build-essential libsecret-1-dev
+          sudo bash cli/install-ai-clis "$RUNNER_TEMP/ai-cli" "$RUNNER_TEMP/ai-bin"
+          for command in codex claude gemini; do
+            "$RUNNER_TEMP/ai-bin/$command" --version
+          done
+          sudo bash cli/install-ai-clis "$RUNNER_TEMP/ai-cli" "$RUNNER_TEMP/ai-bin"
 
       - name: Exercise the installer
         env:

@@ -30,10 +30,13 @@ Neither command requires a Git clone. Both run without installation prompts and 
 
 - **Desktop:** KDE Plasma, LightDM/Slick Greeter, fonts, and group wallpapers. Defaults include a dark theme, a 30-minute screen lock, and no automatic display sleep, suspend, or lid-close action.
 - **Applications:** Chrome, Slack with math-with-slack, Emacs, Evince, Inkscape with TexText, Meld, and FFmpeg.
-- **Research and development:** Git, Python/pip, Node.js/npm, Clang/clangd, MPICH, development libraries, TeX Live (including `texlive-bibtex-extra`), `latexmk`, and VisIt 3.5/3.4.
+- **Research and development:** Git/Git LFS, GitHub CLI (`gh`), Python/pip/Flask, Node.js/npm, Clang/clangd, MPICH, development libraries, TeX Live (including `texlive-bibtex-extra`), `latexmk`, and VisIt 3.5/3.4.
+- **AI command-line tools:** Codex, Claude Code, and Gemini CLI, with an isolated Node.js 24 runtime.
 - **Networking:** OpenSSH, UFW with SSH allowed, and OpenConnect/NetworkManager configured for ISU.
 
 ## After installation
+
+- **CLI sign-in:** run `codex`, `claude`, or `gemini` as your normal user; use `gh auth login` for GitHub. Credentials are not configured by the installer. AI CLI versions are pinned in `cli/install-ai-clis`; rerunning setup installs the versions specified there.
 
 - **ISU VPN:** click **Connect** beside **ISU** in KDE, or run `isu-vpn`. Complete browser sign-in and MFA. Uses `vpn.iastate.edu`, the **Primary** group, and split routing based on [official ISU instructions](https://iastate.service-now.com/it?id=kb_article&sysparm_article=KB0011105), adapted for OpenConnect. VPN login is not part of the unattended installation.
 - **TexText:** restart Inkscape, then open **Extensions → Text → TexText**.
@@ -48,12 +51,13 @@ Neither command requires a Git clone. Both run without installation prompts and 
 
 [![Installer CI](https://github.com/solidsgroup/NewComputer/actions/workflows/ci.yml/badge.svg)](https://github.com/solidsgroup/NewComputer/actions/workflows/ci.yml)
 
-CI checks both Ubuntu versions on every push and monthly: installer flow, package dependency resolution, external download URLs, terminal controls, and helper tests. Desktop rendering and authenticated VPN access require manual verification.
+CI checks both Ubuntu versions on every push and monthly: installer flow, package dependency resolution, external download URLs, terminal controls, helper tests, and real AI CLI installation/version checks. Desktop rendering and authenticated VPN access require manual verification.
 
 ## Potentially fragile installations
 
 | Package or integration | Dependency that can break |
 | --- | --- |
+| Codex, Claude Code, Gemini CLI | Pinned npm packages and native dependencies; separate Node.js archive from nodejs.org with a pinned checksum. |
 | Google Chrome | Direct `.deb` download from Google's website. |
 | Slack desktop | Version-specific `.deb` URL on Slack's download server. |
 | math-with-slack | Pinned GitHub patcher and MathJax archive from npm; Slack updates can overwrite or invalidate the patch. |

@@ -44,6 +44,7 @@ readonly -a UI_STEPS=(
     "Configure KDE power, lock screen, and dark theme defaults"
     "Configure the Slick Greeter login screen"
     "Install standard software and development tools"
+    "Install Codex, Claude Code, and Gemini CLI"
     "Install and configure ISU VPN"
     "Install LLNL VisIt 3.5 and 3.4"
     "Ensure Google Chrome is installed"
@@ -59,6 +60,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 for required_file in \
+    "$SCRIPT_DIR/cli/install-ai-clis" \
     "$SCRIPT_DIR/ui/installer-display.py" \
     "$LOGIN_WALLPAPER_SOURCE" \
     "$DESKTOP_WALLPAPER_SOURCE" \
@@ -664,6 +666,8 @@ EOF
 # Install standard software
 show_progress 62 "Install standard software and development tools"
 "${APT_GET[@]}" install \
+    build-essential \
+    libsecret-1-dev \
     emacs \
     evince \
     inkscape \
@@ -673,6 +677,7 @@ show_progress 62 "Install standard software and development tools"
     python-is-python3 \
     git \
     git-lfs \
+    gh \
     ca-certificates \
     curl \
     libeigen3-dev \
@@ -731,6 +736,10 @@ if [[ "$VERSION_ID" == 26.04 ]]; then
         /usr/share/applications/org.inkscape.Inkscape.desktop \
         > /usr/local/share/applications/org.inkscape.Inkscape.desktop
 fi
+
+show_progress 66 "Install Codex, Claude Code, and Gemini CLI"
+install -Dm755 "$SCRIPT_DIR/cli/install-ai-clis" /usr/local/sbin/install-ai-clis
+bash /usr/local/sbin/install-ai-clis
 
 show_progress 68 "Install and configure ISU VPN"
 "${APT_GET[@]}" install \

@@ -189,6 +189,12 @@ assert_trace_matches '^apt-get .* upgrade$'
 assert_trace_matches \
     '^apt-get .* install .*kde-full.*lightdm.*slick-greeter.*breeze-gtk-theme.*breeze-icon-theme'
 assert_trace_matches '^apt-get .* install .*ffmpeg'
+assert_trace_matches '^apt-get .* install .*git-lfs.*gh'
+assert_file_contains '[ 66%] ● Install Codex, Claude Code, and Gemini CLI' "$UI_OUTPUT"
+cmp "$REPOSITORY_DIR/cli/install-ai-clis" /usr/local/sbin/install-ai-clis
+for command in codex claude gemini; do
+    [[ -x "/usr/local/bin/$command" ]]
+done
 assert_file_contains 'python3 /usr/local/bin/isu-vpn --configure' "$COMMAND_TRACE"
 cmp "$REPOSITORY_DIR/vpn/isu-vpn" /usr/local/bin/isu-vpn
 cmp "$REPOSITORY_DIR/vpn/isu-vpn-agent" /usr/local/bin/isu-vpn-agent

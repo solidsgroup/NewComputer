@@ -7,6 +7,7 @@ readonly BRANCH="master"
 readonly COMMIT_FEED_URL="https://github.com/$REPOSITORY/commits/$BRANCH.atom"
 readonly -a INSTALLER_FILES=(
     "new-computer-configure.sh"
+    "cli/install-ai-clis"
     "ui/installer-display.py"
     "kde/set-solids-kde-settings"
     "kde/inkscape-with-local-menu"
@@ -63,6 +64,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p \
+    "$INSTALLER_TEMP_DIR/cli" \
     "$INSTALLER_TEMP_DIR/ui" \
     "$INSTALLER_TEMP_DIR/kde" \
     "$INSTALLER_TEMP_DIR/inkscape" \

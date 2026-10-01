@@ -1,0 +1,82 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+# Keep AI tools independent of Ubuntu 24.04's older system Node.js.
+# Optional paths allow the same real installation to be tested without root.
+readonly PREFIX="${1:-/opt/new-computer-ai-cli}"
+readonly BIN_DIR="${2:-/usr/local/bin}"
+readonly NODE_VERSION=24.21.0
+readonly NODE_SHA256=fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
+readonly CODEX_VERSION=0.159.3
+readonly CLAUDE_VERSION=2.1.286
+readonly GEMINI_VERSION=0.62.0
+readonly RELEASE="node${NODE_VERSION}-codex${CODEX_VERSION}-claude${CLAUDE_VERSION}-gemini${GEMINI_VERSION}-r1"
+readonly TARGET="$PREFIX/$RELEASE"
+
+if [[ "$PREFIX" != /* || "$BIN_DIR" != /* ]]; then
+    echo 'Installation paths must be absolute.' >&2
+    exit 1
+fi
+install -d -m755 "$PREFIX" "$BIN_DIR"
+exec 8>"$PREFIX/.install.lock"
+flock 8
+stage=""
+cleanup() {
+    [[ -z "$stage" ]] || rm -rf -- "$stage"
+}
+trap cleanup EXIT
+
+if [[ ! -f "$TARGET/.complete" ]]; then
+    stage="$(mktemp -d "$PREFIX/.stage.XXXXXX")"
+    archive="$stage/node.tar.xz"
+    curl --fail --location --silent --show-error --retry 5 --retry-delay 2 \
+        "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \
+        --output "$archive"
+    printf '%s  %s\n' "$NODE_SHA256" "$archive" | sha256sum --check --status
+    tar -xJf "$archive" --strip-components=1 -C "$stage"
+    rm -- "$archive"
+    install -d "$stage/home"
+    npm_command=(env "HOME=$stage/home" "PATH=$stage/bin:/usr/bin:/bin"
+        "$stage/bin/npm" install --global --prefix "$stage" --include=optional
+        --allow-scripts=@anthropic-ai/claude-code,@github/keytar,node-pty
+        --engine-strict --no-audit --no-fund --registry=https://registry.npmjs.org
+        "@openai/codex@$CODEX_VERSION"
+        "@anthropic-ai/claude-code@$CLAUDE_VERSION"
+        "@google/gemini-cli@$GEMINI_VERSION")
+    # Package installation hooks do not need system privileges.
+    if [[ $EUID -eq 0 ]]; then
+        chown -R nobody:nogroup "$stage"
+        runuser -u nobody -- "${npm_command[@]}" </dev/null
+        chown -R root:root "$stage"
+    else
+        "${npm_command[@]}" </dev/null
+    fi
+    for command in codex claude gemini; do
+        env "HOME=$stage/home" "PATH=$stage/bin:/usr/bin:/bin" \
+            "$stage/bin/$command" --version </dev/null
+    done
+    rm -rf -- "$stage/home"
+    chmod -R a+rX "$stage"
+    touch "$stage/.complete"
+    mv -- "$stage" "$TARGET"
+    stage=""
+else
+    echo "AI CLI release $RELEASE is already installed."
+fi
+
+# Stable wrappers select the private Node runtime for every user.
+install -d -m755 "$TARGET/launchers"
+for command in codex claude gemini; do
+    {
+        printf '#!/bin/bash\n'
+        printf 'export PATH=%q:"$PATH"\n' "$PREFIX/current/bin"
+        printf 'exec %q "$@"\n' "$PREFIX/current/bin/$command"
+    } >"$TARGET/launchers/$command"
+    chmod 755 "$TARGET/launchers/$command"
+done
+ln -sfn "$RELEASE" "$PREFIX/current.next"
+mv -Tf "$PREFIX/current.next" "$PREFIX/current"
+for command in codex claude gemini; do
+    ln -sfn "$PREFIX/current/launchers/$command" "$BIN_DIR/$command"
+done
+echo 'Installed codex, claude, and gemini. Run each as your normal user to sign in.'
