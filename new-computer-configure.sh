@@ -672,6 +672,7 @@ show_progress 62 "Install standard software and development tools"
     mpich \
     python-is-python3 \
     git \
+    git-lfs \
     ca-certificates \
     curl \
     libeigen3-dev \
@@ -681,6 +682,7 @@ show_progress 62 "Install standard software and development tools"
     openssh-server \
     meld \
     python3-pip \
+    python3-flask \
     python3-setuptools \
     nodejs \
     npm \
