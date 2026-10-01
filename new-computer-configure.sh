@@ -678,6 +678,8 @@ show_progress 62 "Install standard software and development tools"
     git \
     git-lfs \
     gh \
+    rclone \
+    fuse3 \
     ca-certificates \
     curl \
     libeigen3-dev \

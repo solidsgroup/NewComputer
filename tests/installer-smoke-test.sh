@@ -190,6 +190,7 @@ assert_trace_matches \
     '^apt-get .* install .*kde-full.*lightdm.*slick-greeter.*breeze-gtk-theme.*breeze-icon-theme'
 assert_trace_matches '^apt-get .* install .*ffmpeg'
 assert_trace_matches '^apt-get .* install .*git-lfs.*gh'
+assert_trace_matches '^apt-get .* install .*rclone.*fuse3'
 assert_file_contains '[ 66%] ● Install Codex, Claude Code, and Gemini CLI' "$UI_OUTPUT"
 cmp "$REPOSITORY_DIR/cli/install-ai-clis" /usr/local/sbin/install-ai-clis
 for command in codex claude gemini; do

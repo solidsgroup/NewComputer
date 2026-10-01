@@ -33,6 +33,7 @@ Neither command requires a Git clone. Both run without installation prompts and 
 - **Research and development:** Git/Git LFS, GitHub CLI (`gh`), Python/pip/Flask, Node.js/npm, Clang/clangd, MPICH, development libraries, TeX Live (including `texlive-bibtex-extra`), `latexmk`, and VisIt 3.5/3.4.
 - **AI command-line tools:** Codex, Claude Code, and Gemini CLI, with an isolated Node.js 24 runtime.
 - **Networking:** OpenSSH, UFW with SSH allowed, and OpenConnect/NetworkManager configured for ISU.
+- **Cloud storage:** rclone and FUSE 3 for mounting Google Drive. Automatic Shared Drive setup is not configured yet.
 
 ## After installation
 
