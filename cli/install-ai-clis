@@ -46,10 +46,10 @@ if [[ ! -f "$TARGET/.complete" ]]; then
     # Package installation hooks do not need system privileges.
     if [[ $EUID -eq 0 ]]; then
         chown -R nobody:nogroup "$stage"
-        runuser -u nobody -- "${npm_command[@]}" </dev/null
+        (cd "$stage" && runuser -u nobody -- "${npm_command[@]}") </dev/null
         chown -R root:root "$stage"
     else
-        "${npm_command[@]}" </dev/null
+        (cd "$stage" && "${npm_command[@]}") </dev/null
     fi
     for command in codex claude gemini; do
         env "HOME=$stage/home" "PATH=$stage/bin:/usr/bin:/bin" \
