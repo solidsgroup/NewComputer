@@ -79,11 +79,11 @@ jobs:
       - name: Install and launch the real AI CLIs
         run: |
           sudo apt-get install -y build-essential libsecret-1-dev
-          sudo bash cli/install-ai-clis "$RUNNER_TEMP/ai-cli" "$RUNNER_TEMP/ai-bin"
+          sudo bash cli/install-ai-clis /opt/new-computer-ai-cli-test "$RUNNER_TEMP/ai-bin"
           for command in codex claude gemini; do
             "$RUNNER_TEMP/ai-bin/$command" --version
           done
-          sudo bash cli/install-ai-clis "$RUNNER_TEMP/ai-cli" "$RUNNER_TEMP/ai-bin"
+          sudo bash cli/install-ai-clis /opt/new-computer-ai-cli-test "$RUNNER_TEMP/ai-bin"
 
       - name: Exercise the installer
         env:
