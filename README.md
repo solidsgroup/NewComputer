@@ -33,11 +33,9 @@ Neither command requires a Git clone. Both run without installation prompts and 
 - **Research and development:** Git/Git LFS, GitHub CLI (`gh`), Python/pip/Flask, Node.js/npm, Clang/clangd, MPICH, development libraries, TeX Live (including `texlive-bibtex-extra`), `latexmk`, and VisIt 3.5/3.4.
 - **AI command-line tools:** Codex, Claude Code, and Gemini CLI, with an isolated Node.js 24 runtime.
 - **Networking:** OpenSSH, UFW with SSH allowed, and OpenConnect/NetworkManager configured for ISU.
-- **Cloud storage:** rclone/FUSE, automatic per-user Solids Group Shared Drive mounts at `~/gdrive`, and a Dolphin shortcut.
 
 ## After installation
 
-- **Shared Drive:** an administrator must first [create an Internal Google Desktop OAuth client](drive/README.md) and run `sudo solids-drive --install-client /path/to/client.json` on each computer. Users then sign in through the browser at their next KDE login, or run `solids-drive`. Authorization is remembered per user; setup creates `~/gdrive/<Linux-username>` on the shared drive. Use `solids-drive --reauth` to change accounts and `journalctl --user -u solids-drive` for status. User folders are shared, not private. [Setup and limitations](drive/README.md).
 - **CLI sign-in:** run `codex`, `claude`, or `gemini` as your normal user; use `gh auth login` for GitHub. Credentials are not configured by the installer. AI CLI versions are pinned in `cli/install-ai-clis`; rerunning setup installs the versions specified there.
 
 - **ISU VPN:** click **Connect** beside **ISU** in KDE, or run `isu-vpn`. Complete browser sign-in and MFA. Uses `vpn.iastate.edu`, the **Primary** group, and split routing based on [official ISU instructions](https://iastate.service-now.com/it?id=kb_article&sysparm_article=KB0011105), adapted for OpenConnect. VPN login is not part of the unattended installation.
@@ -65,6 +63,5 @@ CI checks both Ubuntu versions on every push and monthly: installer flow, packag
 | math-with-slack | Pinned GitHub patcher and MathJax archive from npm; Slack updates can overwrite or invalidate the patch. |
 | VisIt 3.5/3.4 | Large, version-specific GitHub release archives with pinned checksums; Ubuntu 24 binaries are also used on Ubuntu 26.04. |
 | TexText compatibility fix | Ubuntu 26.04 patch depends on TexText's Python source layout; package updates can replace it. |
-| Shared Drive | Google OAuth client configuration, Drive permissions/API availability, and refresh-token validity. |
 
 The bootstrap also depends on GitHub's API, commit feed, and raw-file downloads. Most other software comes from Ubuntu's APT repositories.

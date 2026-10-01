@@ -8,11 +8,6 @@ readonly COMMIT_FEED_URL="https://github.com/$REPOSITORY/commits/$BRANCH.atom"
 readonly -a INSTALLER_FILES=(
     "new-computer-configure.sh"
     "cli/install-ai-clis"
-    "drive/solids-drive"
-    "drive/solids-drive.service"
-    "drive/solids-drive.desktop"
-    "drive/solids-drive-autostart.desktop"
-    "drive/solids-drive-tmpfiles.conf"
     "ui/installer-display.py"
     "kde/set-solids-kde-settings"
     "kde/inkscape-with-local-menu"
@@ -70,7 +65,6 @@ trap cleanup EXIT
 
 mkdir -p \
     "$INSTALLER_TEMP_DIR/cli" \
-    "$INSTALLER_TEMP_DIR/drive" \
     "$INSTALLER_TEMP_DIR/ui" \
     "$INSTALLER_TEMP_DIR/kde" \
     "$INSTALLER_TEMP_DIR/inkscape" \

@@ -1,5 +1,0 @@
-# Downloaded Google OAuth clients and personal rclone credentials.
-client_secret*.json
-drive/client.json
-**/rclone.conf
-__pycache__/

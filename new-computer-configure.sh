@@ -46,7 +46,6 @@ readonly -a UI_STEPS=(
     "Install standard software and development tools"
     "Install Codex, Claude Code, and Gemini CLI"
     "Install and configure ISU VPN"
-    "Configure Solids Group Shared Drive"
     "Install LLNL VisIt 3.5 and 3.4"
     "Ensure Google Chrome is installed"
     "Install Slack desktop and math rendering"
@@ -61,11 +60,6 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 for required_file in \
-    "$SCRIPT_DIR/drive/solids-drive" \
-    "$SCRIPT_DIR/drive/solids-drive.service" \
-    "$SCRIPT_DIR/drive/solids-drive.desktop" \
-    "$SCRIPT_DIR/drive/solids-drive-autostart.desktop" \
-    "$SCRIPT_DIR/drive/solids-drive-tmpfiles.conf" \
     "$SCRIPT_DIR/cli/install-ai-clis" \
     "$SCRIPT_DIR/ui/installer-display.py" \
     "$LOGIN_WALLPAPER_SOURCE" \
@@ -684,9 +678,6 @@ show_progress 62 "Install standard software and development tools"
     git \
     git-lfs \
     gh \
-    rclone \
-    fuse3 \
-    kdialog \
     ca-certificates \
     curl \
     libeigen3-dev \
@@ -764,16 +755,6 @@ install -Dm644 "$ISU_VPN_DESKTOP_SOURCE" /usr/local/share/applications/isu-vpn.d
 install -Dm755 "$SCRIPT_DIR/vpn/isu-vpn-agent" /usr/local/bin/isu-vpn-agent
 install -Dm644 "$SCRIPT_DIR/vpn/isu-vpn-agent.desktop" /etc/xdg/autostart/isu-vpn-agent.desktop
 python3 /usr/local/bin/isu-vpn --configure
-
-show_progress 70 "Configure Solids Group Shared Drive"
-install -Dm755 "$SCRIPT_DIR/drive/solids-drive" /usr/local/bin/solids-drive
-install -Dm644 "$SCRIPT_DIR/drive/solids-drive.service" /etc/systemd/user/solids-drive.service
-install -Dm644 "$SCRIPT_DIR/drive/solids-drive.desktop" /usr/local/share/applications/solids-drive.desktop
-install -Dm644 "$SCRIPT_DIR/drive/solids-drive-autostart.desktop" /etc/xdg/autostart/solids-drive.desktop
-install -Dm644 "$SCRIPT_DIR/drive/solids-drive-tmpfiles.conf" /etc/tmpfiles.d/solids-drive.conf
-systemd-tmpfiles --create /etc/tmpfiles.d/solids-drive.conf
-# Preserve /etc/solids-drive/client.json and all user tokens across reruns.
-# Browser authorization happens in each user's desktop session, never as root.
 
 # Install LLNL's official release binary distributions directly. This avoids
 # the interactive visit-install script while retaining side-by-side versions.
