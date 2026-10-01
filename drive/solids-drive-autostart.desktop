@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Solids Group Drive
+Comment=Mount the group Shared Drive using your saved Google authorization
+Exec=/usr/local/bin/solids-drive
+OnlyShowIn=KDE;
+X-KDE-autostart-after=panel
+NoDisplay=true

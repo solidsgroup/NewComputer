@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Solids Group Drive
+Comment=Connect your Google account and mount the group Shared Drive
+Exec=/usr/local/bin/solids-drive
+Icon=folder-remote
+Terminal=false
+Categories=Network;FileTransfer;
