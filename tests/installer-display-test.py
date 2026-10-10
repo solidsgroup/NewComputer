@@ -26,6 +26,7 @@ spec.loader.exec_module(display)
 class DisplayTests(unittest.TestCase):
     def test_layout_and_escape_filtering(self):
         checklist = ['Title', 'Subtitle', 'Rule', 'Progress'] + [f'○ step {i}' for i in range(16)] + ['Status', 'Log']
+        checklist[5] = '✗ Earlier failed task'
         checklist[14] = '● Install and configure ISU VPN'
         for width, height in [(132, 30), (80, 24), (45, 12), (20, 5)]:
             frame = display.frame(checklist, ['live output\x1b[2J', '\x1b]0;bad title\x07safe'], width, height, show_log=True)

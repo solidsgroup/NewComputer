@@ -29,6 +29,7 @@ UI_STATE="running"
 CANCELLED_SIGNAL=""
 
 readonly C0=$'\033[38;2;31;119;180m'
+readonly UI_RED=$'\033[38;2;220;70;70m'
 readonly C1=$'\033[38;2;255;127;14m'
 readonly UI_BOLD=$'\033[1m'
 readonly UI_DIM=$'\033[2m'
@@ -53,6 +54,9 @@ readonly -a UI_STEPS=(
     "Configure remote SSH access"
     "Remove unneeded packages"
 )
+
+declare -a UI_RESULTS=()
+FAILED_STEPS=0
 
 if [[ $EUID -ne 0 ]]; then
     echo "Run this script as root: sudo $0"
@@ -153,6 +157,7 @@ render_ui() {
 render_checklist() {
     local blue
     local orange
+    local red
     local bold
     local dim
     local reset
@@ -167,16 +172,17 @@ render_checklist() {
     [[ "$UI_IS_TTY" == true ]] || return 0
 
     blue="$(ui_color "$C0")"
+    red="$(ui_color "$UI_RED")"
     orange="$(ui_color "$C1")"
     bold="$(ui_color "$UI_BOLD")"
     dim="$(ui_color "$UI_DIM")"
     reset="$(ui_color "$UI_RESET")"
 
-    if [[ "$UI_STATE" == "succeeded" ]]; then
-        completed=${#UI_STEPS[@]}
-    elif (( UI_CURRENT_STEP >= 0 )); then
-        completed=$UI_CURRENT_STEP
-    fi
+    for index in "${!UI_STEPS[@]}"; do
+        if [[ "${UI_RESULTS[$index]:-pending}" == succeeded ]]; then
+            completed=$((completed + 1))
+        fi
+    done
 
     filled=$((PROGRESS_PERCENT * 30 / 100))
     empty=$((30 - filled))
@@ -196,10 +202,12 @@ render_checklist() {
 
     for index in "${!UI_STEPS[@]}"; do
         label="${UI_STEPS[$index]}"
-        if [[ "$UI_STATE" == "succeeded" || $index -lt $UI_CURRENT_STEP ]]; then
+        if [[ "${UI_RESULTS[$index]:-pending}" == succeeded ]]; then
             printf '  %s✓%s  %s\n' "$blue" "$reset" "$label" >&3
-        elif [[ "$UI_STATE" == "failed" && $index -eq $UI_CURRENT_STEP ]]; then
-            printf '  %s×%s  %s%s%s\n' "$orange" "$reset" "$bold" "$label" "$reset" >&3
+        elif [[ "${UI_RESULTS[$index]:-pending}" == failed || ( "$UI_STATE" == failed && $index -eq $UI_CURRENT_STEP ) ]]; then
+            printf '  %s✗%s  %s%s%s\n' "$red" "$reset" "$bold" "$label" "$reset" >&3
+        elif [[ "${UI_RESULTS[$index]:-pending}" == skipped ]]; then
+            printf '  %s–  %s (skipped after failures)%s\n' "$dim" "$label" "$reset" >&3
         elif [[ "$UI_STATE" == "cancelled" && $index -eq $UI_CURRENT_STEP ]]; then
             printf '  %s■%s  %s%s%s %s(cancelled)%s\n' \
                 "$orange" "$reset" "$bold" "$label" "$reset" "$dim" "$reset" >&3
@@ -215,6 +223,10 @@ render_checklist() {
         succeeded)
             printf '  %s✓ Setup complete%s  ·  Reboot recommended\n' \
                 "$blue" "$reset" >&3
+            ;;
+        partial)
+            printf '  %s✗ Setup finished with %d failed task(s)%s  ·  Review log before reboot\n' \
+                "$red" "$FAILED_STEPS" "$reset" >&3
             ;;
         failed)
             printf '  %s× Setup stopped near line %s%s  ·  See the log below\n' \
@@ -248,7 +260,11 @@ show_progress() {
         UI_CURRENT_STEP=-1
     elif (( percent == 100 )); then
         UI_CURRENT_STEP=-1
-        UI_STATE="succeeded"
+        if (( FAILED_STEPS > 0 )); then
+            UI_STATE="partial"
+        else
+            UI_STATE="succeeded"
+        fi
     else
         UI_CURRENT_STEP=$((UI_CURRENT_STEP + 1))
         if (( UI_CURRENT_STEP >= ${#UI_STEPS[@]} )); then
@@ -269,10 +285,53 @@ show_progress() {
             "$VERSION_ID" >&3
         printf 'Detailed activity: %s\n' "$LOG_FILE" >&3
     elif (( percent == 100 )); then
+        [[ "$UI_STATE" != partial ]] || return 0
         printf '[%3d%%] ✓ %s\n' "$percent" "$message" >&3
     else
         printf '[%3d%%] ● %s\n' "$percent" "$message" >&3
     fi
+}
+
+# Run each phase with errexit enabled, but collect its status in the parent.
+# Do not put the function call in an if/|| condition: Bash would disable
+# errexit throughout the phase and run commands after a failed prerequisite.
+run_step() {
+    local percent="$1" label="$2" task="$3" status
+    show_progress "$percent" "$label"
+    set +e
+    (
+        trap - EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        trap 'status=$?; printf "Task failed near line %s (status %s).\n" "$LINENO" "$status" >&2' ERR
+        set -Eeuo pipefail
+        "$task"
+    )
+    status=$?
+    set -e
+    case "$status" in
+        130) cancel_installation INT ;;
+        143) cancel_installation TERM ;;
+        0) UI_RESULTS[$UI_CURRENT_STEP]=succeeded ;;
+        *) UI_RESULTS[$UI_CURRENT_STEP]=failed
+           FAILED_STEPS=$((FAILED_STEPS + 1)) ;;
+    esac
+    printf 'Task result: %s (status %s): %s\n' "${UI_RESULTS[$UI_CURRENT_STEP]}" "$status" "$label"
+    render_ui
+}
+
+report_results() {
+    local index mark
+    printf '\nInstallation summary:\n'
+    for index in "${!UI_STEPS[@]}"; do
+        case "${UI_RESULTS[$index]:-pending}" in
+            succeeded) mark='✓' ;;
+            failed) mark='✗' ;;
+            skipped) mark='–' ;;
+            *) mark='○' ;;
+        esac
+        printf '  %s %s (%s)\n' "$mark" "${UI_STEPS[$index]}" "${UI_RESULTS[$index]:-pending}"
+    done
 }
 
 cancel_installation() {
@@ -317,7 +376,20 @@ finish() {
             printf 'Configuration cancelled by SIG%s at approximately %s%%. Log: %s\n' \
                 "$CANCELLED_SIGNAL" "$PROGRESS_PERCENT" "$LOG_FILE" >&3
         fi
+    elif [[ "$UI_STATE" == partial ]]; then
+        exit_status=1
+        report_results
+        echo "Configuration finished with $FAILED_STEPS failed task(s). Log: $LOG_FILE"
+        render_ui
+        if [[ "$UI_IS_TTY" != true ]]; then
+            report_results >&3
+            printf 'Configuration finished with %d failed task(s). Log: %s\n' "$FAILED_STEPS" "$LOG_FILE" >&3
+        fi
     elif [[ $exit_status -eq 0 ]]; then
+        report_results
+        if [[ "$UI_IS_TTY" != true ]]; then
+            report_results >&3
+        fi
         echo "Configuration completed successfully at $(date --iso-8601=seconds)."
         echo "A reboot is recommended. Log: $LOG_FILE"
         if [[ "$UI_STATE" != "succeeded" ]]; then
@@ -368,31 +440,142 @@ APT_GET=(
     -o Dpkg::Options::=--force-confold
 )
 
+install_google_chrome() {
+    local chrome_deb
+    local package_architecture=""
+    local package_name=""
+    local package_version=""
+    local status=0
+
+    if dpkg-query -W -f='${db:Status-Status}\n' google-chrome-stable \
+        2>/dev/null | grep -Fxq installed; then
+        echo "Google Chrome is already installed; skipping the package download."
+        return 0
+    fi
+
+    if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+        echo "Google Chrome is only available from Google for amd64 systems." >&2
+        return 1
+    fi
+
+    chrome_deb="$(mktemp --tmpdir=/tmp --suffix=.deb google-chrome-stable.XXXXXX)"
+    curl \
+        --fail \
+        --location \
+        --silent \
+        --show-error \
+        --retry 5 \
+        --retry-delay 2 \
+        "$GOOGLE_CHROME_DEB_URL" \
+        --output "$chrome_deb" || status=$?
+
+    if (( status == 0 )); then
+        package_name="$(dpkg-deb --field "$chrome_deb" Package)" || status=$?
+        package_version="$(dpkg-deb --field "$chrome_deb" Version)" || status=$?
+        package_architecture="$(dpkg-deb --field "$chrome_deb" Architecture)" || status=$?
+    fi
+
+    if (( status == 0 )) && \
+       { [[ "$package_name" != "google-chrome-stable" ]] || \
+         [[ "$package_architecture" != "amd64" ]]; }; then
+        echo "Unexpected package downloaded from Google Chrome URL: " \
+             "$package_name $package_architecture" >&2
+        status=1
+    fi
+
+    if (( status == 0 )); then
+        echo "Installing Google Chrome $package_version."
+        "${APT_GET[@]}" install "$chrome_deb" || status=$?
+    fi
+
+    rm -f -- "$chrome_deb"
+    return "$status"
+}
+
+install_slack_desktop() {
+    local slack_deb
+    local package_architecture=""
+    local package_name=""
+    local package_version=""
+    local status=0
+
+    if dpkg-query -W -f='${db:Status-Status}\n' slack-desktop \
+        2>/dev/null | grep -Fxq installed; then
+        echo "Slack is already installed; skipping the package download."
+        return 0
+    fi
+
+    if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+        echo "Slack is only available for amd64 systems." >&2
+        return 1
+    fi
+
+    slack_deb="$(mktemp --tmpdir=/tmp --suffix=.deb slack-desktop.XXXXXX)"
+    curl \
+        --fail \
+        --location \
+        --silent \
+        --show-error \
+        --retry 5 \
+        --retry-delay 2 \
+        "$SLACK_DEB_URL" \
+        --output "$slack_deb" || status=$?
+
+    if (( status == 0 )); then
+        package_name="$(dpkg-deb --field "$slack_deb" Package)" || status=$?
+        package_version="$(dpkg-deb --field "$slack_deb" Version)" || status=$?
+        package_architecture="$(dpkg-deb --field "$slack_deb" Architecture)" || status=$?
+    fi
+
+    if (( status == 0 )) && \
+       { [[ "$package_name" != "slack-desktop" ]] || \
+         [[ "$package_architecture" != "amd64" ]]; }; then
+        echo "Unexpected package downloaded from Slack URL: " \
+             "$package_name $package_architecture" >&2
+        status=1
+    fi
+
+    if (( status == 0 )); then
+        echo "Installing Slack $package_version."
+        "${APT_GET[@]}" install "$slack_deb" || status=$?
+    fi
+
+    rm -f -- "$slack_deb"
+    return "$status"
+}
+
 echo "Starting unattended configuration for Ubuntu $VERSION_ID."
 echo "Progress is being logged to $LOG_FILE"
 show_progress 0 "Starting configuration"
 
 # basic upgrade and update
-show_progress 5 "Refresh Ubuntu package metadata"
+refresh_packages() {
 "${APT_GET[@]}" update
-show_progress 12 "Upgrade installed Ubuntu packages"
+}
+run_step 5 "Refresh Ubuntu package metadata" refresh_packages
+
+upgrade_packages() {
 "${APT_GET[@]}" upgrade
+}
+run_step 12 "Upgrade installed Ubuntu packages" upgrade_packages
 
 # kde-full and several supporting packages are in Universe. Enable it when a
 # minimal Ubuntu installation does not already provide it.
-show_progress 18 "Check required Ubuntu repositories"
+check_repositories() {
 if ! apt-cache show kde-full >/dev/null 2>&1; then
     "${APT_GET[@]}" install software-properties-common
     add-apt-repository -y universe
     "${APT_GET[@]}" update
 fi
+}
+run_step 18 "Check required Ubuntu repositories" check_repositories
 
 # Install the complete KDE desktop and use LightDM's standard Slick Greeter.
 # Preseeding the display-manager choice keeps this install non-interactive.
 # Ubuntu's display-manager package scripts preserve an existing selection, so
 # also update the authoritative file explicitly after installing LightDM. This
 # keeps that file and systemd's display-manager.service link in agreement.
-show_progress 22 "Install KDE Plasma and LightDM"
+install_kde() {
 echo "shared shared/default-x-display-manager select lightdm" | debconf-set-selections
 "${APT_GET[@]}" install \
     kde-full \
@@ -406,14 +589,17 @@ dpkg-reconfigure lightdm
 ln -sfn /lib/systemd/system/lightdm.service \
     /etc/systemd/system/display-manager.service
 systemctl daemon-reload
+}
+run_step 22 "Install KDE Plasma and LightDM" install_kde
 
 # Jetbrains font
-show_progress 42 "Install fonts"
+install_fonts() {
 "${APT_GET[@]}" install fonts-jetbrains-mono elpa-ligature
-
+}
+run_step 42 "Install fonts" install_fonts
 
 # Install the login and desktop wallpapers.
-show_progress 47 "Install desktop and login wallpapers"
+install_wallpapers() {
 install -Dm644 "$LOGIN_WALLPAPER_SOURCE" /usr/share/backgrounds/solidsgroup.png
 install -Dm644 "$DESKTOP_WALLPAPER_SOURCE" /usr/share/backgrounds/cubes.png
 
@@ -432,8 +618,10 @@ WallpaperPlugin=org.kde.image
 Image=/usr/share/backgrounds/cubes.png
 PreviewImage=/usr/share/backgrounds/cubes.png
 EOF
+}
+run_step 47 "Install desktop and login wallpapers" install_wallpapers
 
-show_progress 52 "Configure KDE power, lock screen, and dark theme defaults"
+configure_kde() {
 
 # Apply settings through KConfig so existing unrelated preferences survive.
 # Plasma 6 reads profile groups in powerdevilrc. Existing Plasma 5 profiles in
@@ -625,10 +813,12 @@ rm -f /etc/sddm.conf.d/10-solids-group.conf \
       /usr/share/sddm/themes/solids-group/Main.qml \
       /usr/share/sddm/themes/solids-group/metadata.desktop
 rmdir /usr/share/sddm/themes/solids-group 2>/dev/null || true
+}
+run_step 52 "Configure KDE power, lock screen, and dark theme defaults" configure_kde
 
 # Configure LightDM's packaged Slick Greeter. Use a late-loading filename so
 # settings left by another desktop environment cannot override this choice.
-show_progress 55 "Configure the Slick Greeter login screen"
+configure_greeter() {
 install -d -m755 /etc/lightdm/lightdm.conf.d
 rm -f /etc/lightdm/lightdm.conf.d/50-solids-group.conf \
       /etc/lightdm/lightdm-gtk-greeter.conf.d/50-solids-group.conf
@@ -662,9 +852,11 @@ onscreen-keyboard=false
 enable-hidpi=auto
 only_on_monitor=-1
 EOF
+}
+run_step 55 "Configure the Slick Greeter login screen" configure_greeter
 
 # Install standard software
-show_progress 62 "Install standard software and development tools"
+install_standard_software() {
 "${APT_GET[@]}" install \
     build-essential \
     libsecret-1-dev \
@@ -736,12 +928,16 @@ if [[ "$VERSION_ID" == 26.04 ]]; then
         /usr/share/applications/org.inkscape.Inkscape.desktop \
         > /usr/local/share/applications/org.inkscape.Inkscape.desktop
 fi
+}
+run_step 62 "Install standard software and development tools" install_standard_software
 
-show_progress 66 "Install Codex, Claude Code, and Gemini CLI"
+install_ai_clis() {
 install -Dm755 "$SCRIPT_DIR/cli/install-ai-clis" /usr/local/sbin/install-ai-clis
 bash /usr/local/sbin/install-ai-clis
+}
+run_step 66 "Install Codex, Claude Code, and Gemini CLI" install_ai_clis
 
-show_progress 68 "Install and configure ISU VPN"
+install_isu_vpn() {
 "${APT_GET[@]}" install \
     openconnect \
     network-manager-openconnect \
@@ -755,137 +951,54 @@ install -Dm644 "$ISU_VPN_DESKTOP_SOURCE" /usr/local/share/applications/isu-vpn.d
 install -Dm755 "$SCRIPT_DIR/vpn/isu-vpn-agent" /usr/local/bin/isu-vpn-agent
 install -Dm644 "$SCRIPT_DIR/vpn/isu-vpn-agent.desktop" /etc/xdg/autostart/isu-vpn-agent.desktop
 python3 /usr/local/bin/isu-vpn --configure
+}
+run_step 68 "Install and configure ISU VPN" install_isu_vpn
 
 # Install LLNL's official release binary distributions directly. This avoids
 # the interactive visit-install script while retaining side-by-side versions.
-show_progress 72 "Install LLNL VisIt 3.5 and 3.4"
+install_visit() {
 install -Dm755 "$VISIT_INSTALLER_SOURCE" \
     /usr/local/sbin/install-visit-binaries
 /usr/local/sbin/install-visit-binaries
-
-install_google_chrome() {
-    local chrome_deb
-    local package_architecture=""
-    local package_name=""
-    local package_version=""
-    local status=0
-
-    if dpkg-query -W -f='${db:Status-Status}\n' google-chrome-stable \
-        2>/dev/null | grep -Fxq installed; then
-        echo "Google Chrome is already installed; skipping the package download."
-        return 0
-    fi
-
-    if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
-        echo "Google Chrome is only available from Google for amd64 systems." >&2
-        return 1
-    fi
-
-    chrome_deb="$(mktemp --tmpdir=/tmp --suffix=.deb google-chrome-stable.XXXXXX)"
-    curl \
-        --fail \
-        --location \
-        --silent \
-        --show-error \
-        --retry 5 \
-        --retry-delay 2 \
-        "$GOOGLE_CHROME_DEB_URL" \
-        --output "$chrome_deb" || status=$?
-
-    if (( status == 0 )); then
-        package_name="$(dpkg-deb --field "$chrome_deb" Package)" || status=$?
-        package_version="$(dpkg-deb --field "$chrome_deb" Version)" || status=$?
-        package_architecture="$(dpkg-deb --field "$chrome_deb" Architecture)" || status=$?
-    fi
-
-    if (( status == 0 )) && \
-       { [[ "$package_name" != "google-chrome-stable" ]] || \
-         [[ "$package_architecture" != "amd64" ]]; }; then
-        echo "Unexpected package downloaded from Google Chrome URL: " \
-             "$package_name $package_architecture" >&2
-        status=1
-    fi
-
-    if (( status == 0 )); then
-        echo "Installing Google Chrome $package_version."
-        "${APT_GET[@]}" install "$chrome_deb" || status=$?
-    fi
-
-    rm -f -- "$chrome_deb"
-    return "$status"
 }
+run_step 72 "Install LLNL VisIt 3.5 and 3.4" install_visit
 
-show_progress 78 "Ensure Google Chrome is installed"
+install_chrome() {
 install_google_chrome
-
-install_slack_desktop() {
-    local slack_deb
-    local package_architecture=""
-    local package_name=""
-    local package_version=""
-    local status=0
-
-    if dpkg-query -W -f='${db:Status-Status}\n' slack-desktop \
-        2>/dev/null | grep -Fxq installed; then
-        echo "Slack is already installed; skipping the package download."
-        return 0
-    fi
-
-    if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
-        echo "Slack is only available for amd64 systems." >&2
-        return 1
-    fi
-
-    slack_deb="$(mktemp --tmpdir=/tmp --suffix=.deb slack-desktop.XXXXXX)"
-    curl \
-        --fail \
-        --location \
-        --silent \
-        --show-error \
-        --retry 5 \
-        --retry-delay 2 \
-        "$SLACK_DEB_URL" \
-        --output "$slack_deb" || status=$?
-
-    if (( status == 0 )); then
-        package_name="$(dpkg-deb --field "$slack_deb" Package)" || status=$?
-        package_version="$(dpkg-deb --field "$slack_deb" Version)" || status=$?
-        package_architecture="$(dpkg-deb --field "$slack_deb" Architecture)" || status=$?
-    fi
-
-    if (( status == 0 )) && \
-       { [[ "$package_name" != "slack-desktop" ]] || \
-         [[ "$package_architecture" != "amd64" ]]; }; then
-        echo "Unexpected package downloaded from Slack URL: " \
-             "$package_name $package_architecture" >&2
-        status=1
-    fi
-
-    if (( status == 0 )); then
-        echo "Installing Slack $package_version."
-        "${APT_GET[@]}" install "$slack_deb" || status=$?
-    fi
-
-    rm -f -- "$slack_deb"
-    return "$status"
 }
+run_step 78 "Ensure Google Chrome is installed" install_chrome
 
-show_progress 80 "Install Slack desktop and math rendering"
+install_slack() {
 install_slack_desktop
 install -Dm755 "$SLACK_MATH_INSTALLER_SOURCE" /usr/local/sbin/install-slack-math
 /usr/local/sbin/install-slack-math
+}
+run_step 80 "Install Slack desktop and math rendering" install_slack
 
 # add everything needed to run with clang
-show_progress 82 "Install the Clang toolchain"
+install_clang() {
 "${APT_GET[@]}" install clang clangd libstdc++-14-dev libgfortran-14-dev
+}
+run_step 82 "Install the Clang toolchain" install_clang
 
 # Activate remote SSH login
-show_progress 97 "Configure remote SSH access"
+configure_ssh() {
 ufw allow OpenSSH
+}
+run_step 97 "Configure remote SSH access" configure_ssh
 
 # Remove packages that are no longer needed only after the full installation
 # has completed successfully.
-show_progress 99 "Remove unneeded packages"
-"${APT_GET[@]}" autoremove
+remove_unused_packages() {
+    "${APT_GET[@]}" autoremove
+}
+if (( FAILED_STEPS == 0 )); then
+    run_step 99 "Remove unneeded packages" remove_unused_packages
+else
+    show_progress 99 "Remove unneeded packages"
+    UI_RESULTS[$UI_CURRENT_STEP]=skipped
+    echo "Skipping package removal because installation tasks failed."
+    render_ui
+fi
 
 show_progress 100 "Configuration complete"

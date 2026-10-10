@@ -78,12 +78,12 @@ def checklist_view(lines, height):
         return lines + [''] * (height - len(lines))
     # Keep the active phase visible while retaining summary and result lines.
     if height < 7:
-        active = next((line for line in lines if '●' in line or '×' in line or '■' in line), '')
+        active = next((line for mark in ('●', '✗', '×', '■') for line in lines if mark in line), '')
         return ([lines[0], active] + lines[-2:])[:height]
     head, foot = lines[:4], lines[-2:]
     body = lines[4:-2]
     count = height - len(head) - len(foot)
-    current = next((i for i, line in enumerate(body) if any(c in line for c in '●×■')), len(body) - 1)
+    current = next((i for mark in ('●', '✗', '×', '■') for i, line in enumerate(body) if mark in line), len(body) - 1)
     start = min(max(0, current - count // 2), max(0, len(body) - count))
     return head + body[start:start + count] + foot
 

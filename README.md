@@ -16,7 +16,7 @@ curl -fsSL -H 'Accept: application/vnd.github.raw+json' 'https://api.github.com/
 sudo systemd-run --unit=new-computer-configure --collect /bin/bash -o pipefail -c "curl -fsSL -H 'Accept: application/vnd.github.raw+json' 'https://api.github.com/repos/solidsgroup/NewComputer/contents/install.sh?ref=master' | bash"
 ```
 
-Neither command requires a Git clone. Both run without installation prompts and stop on errors. Reboot after successful completion; the installer does not reboot automatically.
+Neither command requires a Git clone. Both run without installation prompts. Failed tasks are marked ✗ in the final summary; subsequent tasks still run. Any task failure gives a nonzero exit status. Reboot after successful completion; the installer does not reboot automatically.
 
 ## Progress and troubleshooting
 

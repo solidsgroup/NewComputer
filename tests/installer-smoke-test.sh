@@ -349,4 +349,21 @@ assert_trace_not_matches 'BatteryCriticalAction'
 assert_trace_not_matches \
     '(^| )(powerButtonAction|PowerButtonAction|powerDownAction|PowerDownAction)( |$)'
 
+# A failed download must not prevent later phases or falsely report success.
+failure_status=0
+sudo env "PATH=$MOCK_BIN_DIR:$PATH" \
+    "CI_COMMAND_TRACE=$TEST_TEMP_DIR/failure-trace" CI_FAIL_CHROME_DOWNLOAD=1 \
+    bash "$REPOSITORY_DIR/new-computer-configure.sh" \
+    >"$TEST_TEMP_DIR/failure-ui" 2>&1 || failure_status=$?
+[[ "$failure_status" == 1 ]]
+assert_file_contains '✗ Ensure Google Chrome is installed (failed)' "$TEST_TEMP_DIR/failure-ui"
+assert_file_contains '✓ Install Slack desktop and math rendering (succeeded)' "$TEST_TEMP_DIR/failure-ui"
+assert_file_contains '✓ Configure remote SSH access (succeeded)' "$TEST_TEMP_DIR/failure-ui"
+assert_file_contains '– Remove unneeded packages (skipped)' "$TEST_TEMP_DIR/failure-ui"
+assert_file_contains '1 failed task(s)' "$TEST_TEMP_DIR/failure-ui"
+if grep -Fq 'autoremove' "$TEST_TEMP_DIR/failure-trace"; then
+    echo 'Package cleanup should be skipped after failure.' >&2
+    exit 1
+fi
+
 printf 'Installer smoke test passed on Ubuntu %s.\n' "$VERSION_ID"

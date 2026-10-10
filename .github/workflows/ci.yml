@@ -40,6 +40,9 @@ jobs:
             bash -n "$script"
           done
 
+      - name: Check task failure isolation and cancellation
+        run: python3 tests/installer-task-test.py
+
       - name: Check live terminal display
         run: python3 tests/installer-display-test.py
 

@@ -12,6 +12,11 @@ if [[ "${CI_INTERRUPT_ON_COMMAND:-}" == "$command_name" ]]; then
     exit 130
 fi
 
+if [[ "${CI_FAIL_CHROME_DOWNLOAD:-0}" == 1 && "$command_name" == curl && "$*" == *dl.google.com* ]]; then
+    echo 'Simulated Chrome download failure' >&2
+    exit 22
+fi
+
 case "$command_name" in
     apt-get)
         for argument in "$@"; do
