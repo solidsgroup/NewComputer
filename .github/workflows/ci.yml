@@ -79,11 +79,21 @@ jobs:
       - name: Install and launch the real AI CLIs
         run: |
           sudo apt-get install -y build-essential libsecret-1-dev
-          sudo bash cli/install-ai-clis /opt/new-computer-ai-cli-test "$RUNNER_TEMP/ai-bin"
+          private_prefix_parent="$(mktemp -d)"
+          if sudo bash cli/install-ai-clis "$private_prefix_parent/tools" "$RUNNER_TEMP/ai-bin" >"$RUNNER_TEMP/ai-private-prefix.log" 2>&1; then
+            echo 'Expected a private custom parent to be rejected.' >&2
+            exit 1
+          fi
+          grep -F 'cannot traverse' "$RUNNER_TEMP/ai-private-prefix.log"
+          test "$(stat -c %a "$private_prefix_parent")" = 700
+          # Reproduce a private /opt on a disposable runner. The default prefix
+          # must repair traversal before executing npm as nobody.
+          sudo chmod 700 /opt
+          sudo bash cli/install-ai-clis /opt/new-computer-ai-cli "$RUNNER_TEMP/ai-bin"
           for command in codex claude gemini; do
             "$RUNNER_TEMP/ai-bin/$command" --version
           done
-          sudo bash cli/install-ai-clis /opt/new-computer-ai-cli-test "$RUNNER_TEMP/ai-bin"
+          sudo bash cli/install-ai-clis /opt/new-computer-ai-cli "$RUNNER_TEMP/ai-bin"
 
       - name: Exercise the installer
         env:

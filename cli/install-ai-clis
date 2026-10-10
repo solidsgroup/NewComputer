@@ -17,9 +17,21 @@ if [[ "$PREFIX" != /* || "$BIN_DIR" != /* ]]; then
     echo 'Installation paths must be absolute.' >&2
     exit 1
 fi
+# The default installation is shared by all workstation users, including
+# nobody while running npm hooks. An existing private /opt blocks traversal
+# even when the staging directory itself has the correct ownership.
+if [[ $EUID -eq 0 && "$PREFIX" == /opt/new-computer-ai-cli ]]; then
+    install -d -m755 /opt
+fi
 install -d -m755 "$PREFIX" "$BIN_DIR"
 exec 8>"$PREFIX/.install.lock"
 flock 8
+# Validate ancestors before downloading. Do not change permissions on arbitrary
+# custom prefixes (which may live inside a deliberately private home directory).
+if [[ $EUID -eq 0 ]] && ! (cd / && runuser -u nobody -- test -x "$PREFIX"); then
+    echo "The unprivileged installer cannot traverse $PREFIX. Check parent directory permissions with: namei -l $PREFIX" >&2
+    exit 1
+fi
 stage=""
 cleanup() {
     [[ -z "$stage" ]] || rm -rf -- "$stage"
