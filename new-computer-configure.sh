@@ -69,6 +69,7 @@ for required_file in \
     "$LOGIN_WALLPAPER_SOURCE" \
     "$DESKTOP_WALLPAPER_SOURCE" \
     "$KDE_SETTINGS_SOURCE" \
+    "$SCRIPT_DIR/kde/protect-chrome-appmenu" \
     "$INKSCAPE_LAUNCHER_SOURCE" \
     "$SCRIPT_DIR/vpn/isu-vpn-agent" \
     "$SCRIPT_DIR/vpn/isu-vpn-agent.desktop" \
@@ -964,6 +965,20 @@ install -Dm755 "$VISIT_INSTALLER_SOURCE" \
 run_step 72 "Install LLNL VisIt 3.5 and 3.4" install_visit
 
 install_chrome() {
+# Chrome can crash in GIO when KDE's GTK global-menu module unloads.
+# Preserve other exclusions and apply this even when Chrome is already installed.
+"${APT_GET[@]}" install python3-gi dbus-daemon dconf-gsettings-backend
+install -Dm755 "$SCRIPT_DIR/kde/protect-chrome-appmenu" /usr/local/bin/protect-chrome-appmenu
+install -d /etc/xdg/autostart
+cat > /etc/xdg/autostart/protect-chrome-appmenu.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Chrome global-menu compatibility
+Exec=/usr/local/bin/protect-chrome-appmenu
+NoDisplay=true
+X-KDE-autostart-phase=0
+EOF
+python3 /usr/local/bin/protect-chrome-appmenu --all-users
 install_google_chrome
 }
 run_step 78 "Ensure Google Chrome is installed" install_chrome

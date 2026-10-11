@@ -10,6 +10,7 @@ readonly -a INSTALLER_FILES=(
     "cli/install-ai-clis"
     "ui/installer-display.py"
     "kde/set-solids-kde-settings"
+    "kde/protect-chrome-appmenu"
     "kde/inkscape-with-local-menu"
     "inkscape/disable-duplicate-textext"
     "inkscape/patch-textext-warning.py"

@@ -1,0 +1,64 @@
+#!/usr/bin/python3
+"""Exclude Chrome from the GTK global-menu module without replacing user choices."""
+import argparse
+import os
+from pathlib import Path
+import pwd
+import subprocess
+
+from gi.repository import Gio
+
+# Confirmed on KDE/X11: https://issues.chromium.org/issues/551107198
+SCHEMA = 'org.appmenu.gtk-module'
+CHROME_NAMES = ('google-chrome', 'google-chrome-stable', 'chrome')
+
+
+def protect_user():
+    source = Gio.SettingsSchemaSource.get_default()
+    schema = source.lookup(SCHEMA, True) if source else None
+    # Without this module/schema there is no global-menu integration to disable.
+    if schema is None:
+        return
+    settings = Gio.Settings.new_full(schema, None, None)
+    original = list(settings.get_strv('blacklist'))
+    updated = original + [name for name in CHROME_NAMES if name not in original]
+    if updated != original:
+        if not settings.set_strv('blacklist', updated):
+            raise RuntimeError('Cannot update the Chrome global-menu exclusion')
+        Gio.Settings.sync()
+        if list(settings.get_strv('blacklist')) != updated:
+            raise RuntimeError('Chrome global-menu exclusion was not saved')
+
+
+def protect_all_users():
+    if os.geteuid() != 0:
+        raise SystemExit('--all-users requires root')
+    limits = {'UID_MIN': 1000, 'UID_MAX': 60000}
+    for line in Path('/etc/login.defs').read_text().splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and fields[0] in limits:
+            limits[fields[0]] = int(fields[1])
+    for user in pwd.getpwall():
+        if not limits['UID_MIN'] <= user.pw_uid <= limits['UID_MAX']:
+            continue
+        if not Path(user.pw_dir).is_dir() or Path(user.pw_shell).name in ('false', 'nologin'):
+            continue
+        runtime = Path('/run/user') / str(user.pw_uid)
+        command = ['runuser', '-u', user.pw_name, '--', 'env',
+                   '-u', 'DBUS_SESSION_BUS_ADDRESS', '-u', 'XDG_RUNTIME_DIR',
+                   '-u', 'GSETTINGS_BACKEND', '-u', 'DCONF_PROFILE',
+                   f'HOME={user.pw_dir}', f'XDG_CONFIG_HOME={user.pw_dir}/.config']
+        if (runtime / 'bus').is_socket():
+            command += [f'XDG_RUNTIME_DIR={runtime}',
+                        f'DBUS_SESSION_BUS_ADDRESS=unix:path={runtime}/bus']
+        else:
+            command += ['dbus-run-session', '--']
+        command += ['/usr/bin/python3', str(Path(__file__).resolve())]
+        subprocess.run(command, check=True)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--all-users', action='store_true')
+    args = parser.parse_args()
+    protect_all_users() if args.all_users else protect_user()

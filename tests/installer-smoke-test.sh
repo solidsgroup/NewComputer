@@ -366,4 +366,11 @@ if grep -Fq 'autoremove' "$TEST_TEMP_DIR/failure-trace"; then
     exit 1
 fi
 
+assert_file_contains '"kde/protect-chrome-appmenu"' "$REPOSITORY_DIR/install.sh"
+assert_file_contains 'python3 /usr/local/bin/protect-chrome-appmenu --all-users' "$COMMAND_TRACE"
+assert_file_contains 'python3 /usr/local/bin/protect-chrome-appmenu --all-users' "$CHROME_SKIP_TRACE"
+assert_file_contains 'Exec=/usr/local/bin/protect-chrome-appmenu' /etc/xdg/autostart/protect-chrome-appmenu.desktop
+assert_file_contains 'X-KDE-autostart-phase=0' /etc/xdg/autostart/protect-chrome-appmenu.desktop
+test -x /usr/local/bin/protect-chrome-appmenu
+
 printf 'Installer smoke test passed on Ubuntu %s.\n' "$VERSION_ID"

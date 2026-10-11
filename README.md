@@ -39,6 +39,7 @@ Neither command requires a Git clone. Both run without installation prompts. Fai
 - **CLI sign-in:** run `codex`, `claude`, or `gemini` as your normal user; use `gh auth login` for GitHub. Credentials are not configured by the installer. AI CLI versions are pinned in `cli/install-ai-clis`; rerunning setup installs the versions specified there.
 
 - **ISU VPN:** click **Connect** beside **ISU** in KDE, or run `isu-vpn`. Complete browser sign-in and MFA. Uses `vpn.iastate.edu`, the **Primary** group, and split routing based on [official ISU instructions](https://iastate.service-now.com/it?id=kb_article&sysparm_article=KB0011105), adapted for OpenConnect. VPN login is not part of the unattended installation.
+- **Chrome:** excluded from KDE’s GTK global-menu integration to prevent its startup crash. Applied to existing users and at login for future accounts.
 - **TexText:** restart Inkscape, then open **Extensions → Text → TexText**.
   If an account already has a manually installed TexText copy, the installer
   disables that duplicate so it cannot conflict with Ubuntu's package. The
