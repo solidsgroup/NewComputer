@@ -30,7 +30,7 @@ Neither command requires a Git clone. Both run without installation prompts. Fai
 
 - **Desktop:** KDE Plasma, LightDM/Slick Greeter, fonts, and group wallpapers. Defaults include a dark theme, a 30-minute screen lock, and no automatic display sleep, suspend, or lid-close action.
 - **Applications:** Chrome, Slack with math-with-slack, Emacs, Evince, Inkscape with TexText, Meld, and FFmpeg.
-- **Research and development:** Git/Git LFS, GitHub CLI (`gh`), Python/pip/Flask, Node.js/npm, Clang/clangd, MPICH, development libraries, TeX Live (including `texlive-bibtex-extra`), `latexmk`, and VisIt 3.5/3.4.
+- **Research and development:** Git/Git LFS, GitHub CLI (`gh`), Python/pip/Flask, Node.js/npm, Clang/clangd, the NVIDIA CUDA toolkit (`nvcc`), MPICH, development libraries, TeX Live (including `texlive-bibtex-extra`), `latexmk`, and VisIt 3.5/3.4.
 - **AI command-line tools:** Codex, Claude Code, and Gemini CLI, with an isolated Node.js 24 runtime.
 - **Networking:** OpenSSH, UFW with SSH allowed, and OpenConnect/NetworkManager configured for ISU.
 
@@ -47,6 +47,7 @@ Neither command requires a Git clone. Both run without installation prompts. Fai
   `default_packages.tex` remains active at the original configured path.
 - **Slack math:** restart Slack; use `$ ... $` or `$$ ... $$`. Rendering requires the patch on each viewer's desktop. After a Slack update, close Slack and run `sudo /usr/local/sbin/install-slack-math` to reapply it.
 - **VisIt:** use `visit` or `visit3.5` for 3.5.0, and `visit3.4` for 3.4.2.
+- **CUDA:** run `nvcc --version` to verify the compiler. Ubuntu 24.04 installs its `nvidia-cuda-toolkit` package; Ubuntu 26.04 installs the newer `cuda-toolkit` package. Compiling does not require an NVIDIA GPU, but running GPU code requires supported NVIDIA hardware and a compatible driver. The installer deliberately does not install or replace the hardware-specific GPU driver.
 
 ## CI
 
@@ -64,5 +65,6 @@ CI checks both Ubuntu versions on every push and monthly: installer flow, packag
 | math-with-slack | Pinned GitHub patcher and MathJax archive from npm; Slack updates can overwrite or invalidate the patch. |
 | VisIt 3.5/3.4 | Large, version-specific GitHub release archives with pinned checksums; Ubuntu 24 binaries are also used on Ubuntu 26.04. |
 | TexText compatibility fix | Ubuntu 26.04 patch depends on TexText's Python source layout; package updates can replace it. |
+| CUDA GPU execution | Requires compatible NVIDIA hardware and a matching kernel driver; this installer installs the toolkit but does not select a driver. |
 
 The bootstrap also depends on GitHub's API, commit feed, and raw-file downloads. Most other software comes from Ubuntu's APT repositories.

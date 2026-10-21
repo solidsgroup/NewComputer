@@ -20,11 +20,13 @@ case "$EXPECTED_UBUNTU_VERSION" in
         readonly KWRITE_CONFIG_COMMAND="kwriteconfig5"
         readonly THEME_COMMAND="lookandfeeltool"
         readonly QDBUS_COMMAND="qdbus"
+        readonly CUDA_TOOLKIT_PACKAGE="nvidia-cuda-toolkit"
         ;;
     26.04)
         readonly KWRITE_CONFIG_COMMAND="kwriteconfig6"
         readonly THEME_COMMAND="plasma-apply-lookandfeel"
         readonly QDBUS_COMMAND="qdbus6"
+        readonly CUDA_TOOLKIT_PACKAGE="cuda-toolkit"
         ;;
 esac
 
@@ -61,6 +63,7 @@ readonly -a MOCKED_COMMANDS=(
     sha256sum
     systemctl
     ufw
+    nvcc
 )
 
 for command_name in "${MOCKED_COMMANDS[@]}"; do
@@ -232,6 +235,9 @@ assert_file_contains \
     "$COMMAND_TRACE"
 assert_trace_matches '^apt-get .* install /tmp/google-chrome-stable\..*\.deb$'
 assert_trace_matches '^apt-get .* install .*clang.*clangd'
+assert_trace_matches "^apt-get .* install ${CUDA_TOOLKIT_PACKAGE}$"
+assert_file_contains '[ 86%] ● Install the NVIDIA CUDA toolkit' "$UI_OUTPUT"
+assert_file_contains 'nvcc --version' "$COMMAND_TRACE"
 assert_trace_matches '^apt-get .* autoremove$'
 assert_file_contains "ufw allow OpenSSH" "$COMMAND_TRACE"
 for profile in AC Battery LowBattery; do

@@ -51,6 +51,7 @@ readonly -a UI_STEPS=(
     "Ensure Google Chrome is installed"
     "Install Slack desktop and math rendering"
     "Install the Clang toolchain"
+    "Install the NVIDIA CUDA toolkit"
     "Configure remote SSH access"
     "Remove unneeded packages"
 )
@@ -87,13 +88,18 @@ done
 
 . /etc/os-release
 case "${VERSION_ID:-}" in
-    24.04|26.04)
+    24.04)
+        CUDA_TOOLKIT_PACKAGE="nvidia-cuda-toolkit"
+        ;;
+    26.04)
+        CUDA_TOOLKIT_PACKAGE="cuda-toolkit"
         ;;
     *)
         echo "Unsupported Ubuntu release: ${VERSION_ID:-unknown}. Expected 24.04 or 26.04."
         exit 1
         ;;
 esac
+readonly CUDA_TOOLKIT_PACKAGE
 
 if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
     echo "Unsupported architecture: Google Chrome for Linux requires amd64/x86-64."
@@ -560,12 +566,19 @@ upgrade_packages() {
 }
 run_step 12 "Upgrade installed Ubuntu packages" upgrade_packages
 
-# kde-full and several supporting packages are in Universe. Enable it when a
-# minimal Ubuntu installation does not already provide it.
+# kde-full and several supporting packages are in Universe; the CUDA toolkit
+# is in Multiverse. Enable either repository when a minimal Ubuntu installation
+# does not already provide it.
 check_repositories() {
-if ! apt-cache show kde-full >/dev/null 2>&1; then
+if ! apt-cache show kde-full >/dev/null 2>&1 || \
+   ! apt-cache show "$CUDA_TOOLKIT_PACKAGE" >/dev/null 2>&1; then
     "${APT_GET[@]}" install software-properties-common
-    add-apt-repository -y universe
+    if ! apt-cache show kde-full >/dev/null 2>&1; then
+        add-apt-repository -y universe
+    fi
+    if ! apt-cache show "$CUDA_TOOLKIT_PACKAGE" >/dev/null 2>&1; then
+        add-apt-repository -y multiverse
+    fi
     "${APT_GET[@]}" update
 fi
 }
@@ -995,6 +1008,26 @@ install_clang() {
 "${APT_GET[@]}" install clang clangd libstdc++-14-dev libgfortran-14-dev
 }
 run_step 82 "Install the Clang toolchain" install_clang
+
+# Install Ubuntu's release-native CUDA toolkit. Ubuntu 26.04 packages the
+# current NVIDIA toolkit under /usr/local/cuda, while 24.04's package exposes
+# nvcc directly in /usr/bin. Supply the conventional command path in either
+# case. The GPU driver remains hardware-specific and is intentionally not
+# installed or replaced here.
+install_cuda_toolkit() {
+"${APT_GET[@]}" install "$CUDA_TOOLKIT_PACKAGE"
+
+if ! command -v nvcc >/dev/null 2>&1; then
+    if [[ ! -x /usr/local/cuda/bin/nvcc ]]; then
+        echo "CUDA installed, but nvcc was not found in a supported location." >&2
+        return 1
+    fi
+    ln -sfn /usr/local/cuda/bin/nvcc /usr/local/bin/nvcc
+fi
+
+nvcc --version
+}
+run_step 86 "Install the NVIDIA CUDA toolkit" install_cuda_toolkit
 
 # Activate remote SSH login
 configure_ssh() {

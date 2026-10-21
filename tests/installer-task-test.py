@@ -60,7 +60,7 @@ UI_IS_TTY=false
 ''')
         self.assertEqual(result.returncode, 1)
         self.assertIn('\x1b[38;2;220;70;70m✗', result.stdout)
-        self.assertIn('1/17 complete', result.stdout)
+        self.assertIn('1/18 complete', result.stdout)
         self.assertIn('Setup finished with 1 failed task(s)', result.stdout)
 
     def test_cancellation_stops_later_tasks(self):
