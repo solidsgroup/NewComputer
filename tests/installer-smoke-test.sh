@@ -156,6 +156,7 @@ sudo env \
     "CI_COMMAND_TRACE=$CHROME_SKIP_TRACE" \
     "CI_VALIDATE_APT=0" \
     "CI_GOOGLE_CHROME_INSTALLED=1" \
+    "CI_ZOOM_INSTALLED=1" \
     "CI_SLACK_INSTALLED=1" \
     bash "$REPOSITORY_DIR/new-computer-configure.sh" \
     >"$CHROME_SKIP_UI_OUTPUT" 2>&1
@@ -188,6 +189,7 @@ assert_file_contains "[ 78%] Ensure Google Chrome is installed" \
 
 # Verify the installer requested each important external operation.
 assert_trace_matches '^apt-get .* update$'
+assert_trace_matches '^apt-get .* --fix-broken install$'
 assert_trace_matches '^apt-get .* upgrade$'
 assert_trace_matches \
     '^apt-get .* install .*kde-full.*lightdm.*slick-greeter.*breeze-gtk-theme.*breeze-icon-theme'
@@ -234,6 +236,12 @@ assert_file_contains \
     "curl --fail --location --silent --show-error --retry 5 --retry-delay 2 https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" \
     "$COMMAND_TRACE"
 assert_trace_matches '^apt-get .* install /tmp/google-chrome-stable\..*\.deb$'
+assert_file_contains \
+    "curl --fail --location --silent --show-error --retry 5 --retry-delay 2 https://zoom.us/client/latest/zoom_amd64.deb" \
+    "$COMMAND_TRACE"
+assert_trace_matches '^apt-get .* install /tmp/zoom-workplace\..*\.deb$'
+assert_file_contains '[ 79%] ● Ensure Zoom Workplace is installed' "$UI_OUTPUT"
+assert_file_not_contains '/tmp/zoom-workplace.' "$CHROME_SKIP_TRACE"
 assert_trace_matches '^apt-get .* install .*clang.*clangd'
 assert_trace_matches "^apt-get .* install ${CUDA_TOOLKIT_PACKAGE}$"
 assert_file_contains '[ 86%] ● Install the NVIDIA CUDA toolkit' "$UI_OUTPUT"
@@ -363,6 +371,7 @@ sudo env "PATH=$MOCK_BIN_DIR:$PATH" \
     >"$TEST_TEMP_DIR/failure-ui" 2>&1 || failure_status=$?
 [[ "$failure_status" == 1 ]]
 assert_file_contains '✗ Ensure Google Chrome is installed (failed)' "$TEST_TEMP_DIR/failure-ui"
+assert_file_contains '✓ Ensure Zoom Workplace is installed (succeeded)' "$TEST_TEMP_DIR/failure-ui"
 assert_file_contains '✓ Install Slack desktop and math rendering (succeeded)' "$TEST_TEMP_DIR/failure-ui"
 assert_file_contains '✓ Configure remote SSH access (succeeded)' "$TEST_TEMP_DIR/failure-ui"
 assert_file_contains '– Remove unneeded packages (skipped)' "$TEST_TEMP_DIR/failure-ui"

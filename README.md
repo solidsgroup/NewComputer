@@ -1,6 +1,6 @@
 # New Computer Configuration
 
-Sets up a Solids Group workstation on **Ubuntu 24.04 or 26.04 LTS (amd64/x86-64)** with KDE, research and development tools, Slack with math rendering, and ISU VPN support. Requires internet access, `curl`, and `sudo` privileges.
+Sets up a Solids Group workstation on **Ubuntu 24.04 or 26.04 LTS (amd64/x86-64)** with KDE, research and development tools, Zoom Workplace, Slack with math rendering, and ISU VPN support. Requires internet access, `curl`, and `sudo` privileges.
 
 ## Install
 
@@ -29,7 +29,7 @@ Neither command requires a Git clone. Both run without installation prompts. Fai
 ## What gets installed
 
 - **Desktop:** KDE Plasma, LightDM/Slick Greeter, fonts, and group wallpapers. Defaults include a dark theme, a 30-minute screen lock, and no automatic display sleep, suspend, or lid-close action.
-- **Applications:** Chrome, Slack with math-with-slack, Emacs, Evince, Inkscape with TexText, Meld, and FFmpeg.
+- **Applications:** Chrome, Zoom Workplace, Slack with math-with-slack, Emacs, Evince, Inkscape with TexText, Meld, and FFmpeg.
 - **Research and development:** Git/Git LFS, GitHub CLI (`gh`), Python/pip/Flask, Node.js/npm, Clang/clangd, the NVIDIA CUDA toolkit (`nvcc`), MPICH, development libraries, TeX Live (including `texlive-bibtex-extra`), `latexmk`, and VisIt 3.5/3.4.
 - **AI command-line tools:** Codex, Claude Code, and Gemini CLI, with an isolated Node.js 24 runtime.
 - **Networking:** OpenSSH, UFW with SSH allowed, and OpenConnect/NetworkManager configured for ISU.
@@ -40,6 +40,7 @@ Neither command requires a Git clone. Both run without installation prompts. Fai
 
 - **ISU VPN:** click **Connect** beside **ISU** in KDE, or run `isu-vpn`. Complete browser sign-in and MFA. Uses `vpn.iastate.edu`, the **Primary** group, and split routing based on [official ISU instructions](https://iastate.service-now.com/it?id=kb_article&sysparm_article=KB0011105), adapted for OpenConnect. VPN login is not part of the unattended installation.
 - **Chrome:** excluded from KDE’s GTK global-menu integration to prevent its startup crash. Applied to existing users and at login for future accounts.
+- **Zoom:** installed from Zoom's official Ubuntu package using APT so all required dependencies are installed automatically. Existing installations are retained without another 300 MB download.
 - **TexText:** restart Inkscape, then open **Extensions → Text → TexText**.
   If an account already has a manually installed TexText copy, the installer
   disables that duplicate so it cannot conflict with Ubuntu's package. The
@@ -61,6 +62,7 @@ CI checks both Ubuntu versions on every push and monthly: installer flow, packag
 | --- | --- |
 | Codex, Claude Code, Gemini CLI | Pinned npm packages and native dependencies; separate Node.js archive from nodejs.org with a pinned checksum. |
 | Google Chrome | Direct `.deb` download from Google's website. |
+| Zoom Workplace | Latest `.deb` redirect on Zoom's website; a new upstream release is installed on fresh systems. |
 | Slack desktop | Version-specific `.deb` URL on Slack's download server. |
 | math-with-slack | Pinned GitHub patcher and MathJax archive from npm; Slack updates can overwrite or invalidate the patch. |
 | VisIt 3.5/3.4 | Large, version-specific GitHub release archives with pinned checksums; Ubuntu 24 binaries are also used on Ubuntu 26.04. |

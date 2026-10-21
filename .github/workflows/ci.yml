@@ -75,6 +75,9 @@ jobs:
             https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
             >/dev/null
           curl --fail --location --silent --show-error --head \
+            https://zoom.us/client/latest/zoom_amd64.deb \
+            >/dev/null
+          curl --fail --location --silent --show-error --head \
             https://downloads.slack-edge.com/desktop-releases/linux/x64/4.52.155/slack-desktop-4.52.155-amd64.deb \
             >/dev/null
           for version_and_asset in \

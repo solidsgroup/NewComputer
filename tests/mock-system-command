@@ -48,7 +48,9 @@ EOF
                 # curl creates empty stand-ins for the desktop .deb files. The
                 # workflow checks the real download URL separately, so record
                 # this install without asking APT to parse the placeholder.
-                if [[ "$argument" == /tmp/google-chrome-stable.*.deb || "$argument" == /tmp/slack-desktop.*.deb ]]; then
+                if [[ "$argument" == /tmp/google-chrome-stable.*.deb || \
+                      "$argument" == /tmp/zoom-workplace.*.deb || \
+                      "$argument" == /tmp/slack-desktop.*.deb ]]; then
                     exit 0
                 fi
             done
@@ -126,6 +128,8 @@ EOF
             Package)
                 if [[ "$2" == /tmp/slack-desktop.*.deb ]]; then
                     printf '%s\n' slack-desktop
+                elif [[ "$2" == /tmp/zoom-workplace.*.deb ]]; then
+                    printf '%s\n' zoom
                 else
                     printf '%s\n' google-chrome-stable
                 fi
@@ -143,6 +147,7 @@ EOF
         ;;
     dpkg-query)
         if [[ "${!#}" == google-chrome-stable && "${CI_GOOGLE_CHROME_INSTALLED:-0}" == "1" ]] ||
+           [[ "${!#}" == zoom && "${CI_ZOOM_INSTALLED:-0}" == "1" ]] ||
            [[ "${!#}" == slack-desktop && "${CI_SLACK_INSTALLED:-0}" == "1" ]]; then
             printf '%s\n' installed
             exit 0

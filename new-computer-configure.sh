@@ -20,6 +20,7 @@ TEXTEXT_PATCH_SOURCE="$SCRIPT_DIR/inkscape/patch-textext-warning.py"
 SLACK_MATH_INSTALLER_SOURCE="$SCRIPT_DIR/slack/install-slack-math"
 VISIT_INSTALLER_SOURCE="$SCRIPT_DIR/visit/install-visit-binaries"
 GOOGLE_CHROME_DEB_URL="https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+ZOOM_DEB_URL="https://zoom.us/client/latest/zoom_amd64.deb"
 SLACK_DEB_URL="https://downloads.slack-edge.com/desktop-releases/linux/x64/4.52.155/slack-desktop-4.52.155-amd64.deb"
 LOG_FILE="/var/log/new-computer-configure.log"
 FAILED_LINE="unknown"
@@ -49,6 +50,7 @@ readonly -a UI_STEPS=(
     "Install and configure ISU VPN"
     "Install LLNL VisIt 3.5 and 3.4"
     "Ensure Google Chrome is installed"
+    "Ensure Zoom Workplace is installed"
     "Install Slack desktop and math rendering"
     "Install the Clang toolchain"
     "Install the NVIDIA CUDA toolkit"
@@ -102,7 +104,7 @@ esac
 readonly CUDA_TOOLKIT_PACKAGE
 
 if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
-    echo "Unsupported architecture: Google Chrome for Linux requires amd64/x86-64."
+    echo "Unsupported architecture: external desktop packages require amd64/x86-64."
     exit 1
 fi
 
@@ -499,6 +501,60 @@ install_google_chrome() {
     return "$status"
 }
 
+install_zoom() {
+    local zoom_deb
+    local package_architecture=""
+    local package_name=""
+    local package_version=""
+    local status=0
+
+    if dpkg-query -W -f='${db:Status-Status}\n' zoom \
+        2>/dev/null | grep -Fxq installed; then
+        echo "Zoom Workplace is already installed; skipping the package download."
+        return 0
+    fi
+
+    if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+        echo "Zoom Workplace is only available from Zoom for amd64 systems." >&2
+        return 1
+    fi
+
+    zoom_deb="$(mktemp --tmpdir=/tmp --suffix=.deb zoom-workplace.XXXXXX)"
+    curl \
+        --fail \
+        --location \
+        --silent \
+        --show-error \
+        --retry 5 \
+        --retry-delay 2 \
+        "$ZOOM_DEB_URL" \
+        --output "$zoom_deb" || status=$?
+
+    if (( status == 0 )); then
+        package_name="$(dpkg-deb --field "$zoom_deb" Package)" || status=$?
+        package_version="$(dpkg-deb --field "$zoom_deb" Version)" || status=$?
+        package_architecture="$(dpkg-deb --field "$zoom_deb" Architecture)" || status=$?
+    fi
+
+    if (( status == 0 )) && \
+       { [[ "$package_name" != "zoom" ]] || \
+         [[ "$package_architecture" != "amd64" ]]; }; then
+        echo "Unexpected package downloaded from Zoom URL: " \
+             "$package_name $package_architecture" >&2
+        status=1
+    fi
+
+    if (( status == 0 )); then
+        echo "Installing Zoom Workplace $package_version."
+        # Zoom explicitly recommends installing its local package with APT so
+        # dependencies such as libxcb-xtest0 are installed at the same time.
+        "${APT_GET[@]}" install "$zoom_deb" || status=$?
+    fi
+
+    rm -f -- "$zoom_deb"
+    return "$status"
+}
+
 install_slack_desktop() {
     local slack_deb
     local package_architecture=""
@@ -555,9 +611,12 @@ echo "Starting unattended configuration for Ubuntu $VERSION_ID."
 echo "Progress is being logged to $LOG_FILE"
 show_progress 0 "Starting configuration"
 
-# basic upgrade and update
+# Refresh metadata, then finish any package transaction interrupted before this
+# installer started. In particular, this repairs third-party packages unpacked
+# with `dpkg --install` without their Ubuntu dependencies.
 refresh_packages() {
 "${APT_GET[@]}" update
+"${APT_GET[@]}" --fix-broken install
 }
 run_step 5 "Refresh Ubuntu package metadata" refresh_packages
 
@@ -995,6 +1054,8 @@ python3 /usr/local/bin/protect-chrome-appmenu --all-users
 install_google_chrome
 }
 run_step 78 "Ensure Google Chrome is installed" install_chrome
+
+run_step 79 "Ensure Zoom Workplace is installed" install_zoom
 
 install_slack() {
 install_slack_desktop
